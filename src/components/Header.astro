@@ -1,0 +1,17 @@
+---
+import { SITE_TITLE } from '../consts';
+import HeaderLink from './HeaderLink.astro';
+---
+
+<header class="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-[var(--color-border)]">
+	<nav class="max-w-5xl mx-auto flex items-center justify-between px-4 h-16">
+		<a href="/" class="text-xl font-bold text-[var(--color-text)] no-underline hover:text-[var(--color-accent)] transition-colors">
+			{SITE_TITLE}
+		</a>
+		<div class="flex items-center gap-6">
+			<HeaderLink href="/">Home</HeaderLink>
+			<HeaderLink href="/blog">Blog</HeaderLink>
+			<HeaderLink href="/about">About</HeaderLink>
+		</div>
+	</nav>
+</header>

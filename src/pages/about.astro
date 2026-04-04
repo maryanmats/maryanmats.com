@@ -1,0 +1,30 @@
+---
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+import { SITE_TITLE } from '../consts';
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={`About | ${SITE_TITLE}`} description="About me and this blog." />
+	</head>
+	<body class="bg-white text-[var(--color-text)]">
+		<Header />
+		<main class="max-w-3xl mx-auto px-4 py-12">
+			<h1 class="text-4xl font-bold mb-8">About</h1>
+			<div class="prose max-w-none">
+				<p>
+					Hey! I'm a frontend developer working with React, Next.js, TypeScript, and modern web technologies.
+					This blog is where I share what I learn, build, and think about.
+				</p>
+				<p>
+					Topics include React patterns, TypeScript tips, performance optimization, CSS techniques,
+					and everything else from the frontend world.
+				</p>
+			</div>
+		</main>
+		<Footer />
+	</body>
+</html>

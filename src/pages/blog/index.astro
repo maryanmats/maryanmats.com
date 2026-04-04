@@ -1,0 +1,76 @@
+---
+import { Image } from 'astro:assets';
+import { getCollection } from 'astro:content';
+import BaseHead from '../../components/BaseHead.astro';
+import Footer from '../../components/Footer.astro';
+import FormattedDate from '../../components/FormattedDate.astro';
+import Header from '../../components/Header.astro';
+import { SITE_TITLE } from '../../consts';
+
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+	.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+
+const allTags = [...new Set(posts.flatMap((post) => post.data.tags))].sort();
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={`Blog | ${SITE_TITLE}`} description="All blog posts." />
+	</head>
+	<body class="bg-white text-[var(--color-text)]">
+		<Header />
+		<main class="max-w-5xl mx-auto px-4 py-12">
+			<h1 class="text-4xl font-bold mb-4">Blog</h1>
+
+			{allTags.length > 0 && (
+				<div class="flex flex-wrap gap-2 mb-10">
+					{allTags.map((tag) => (
+						<a
+							href={`/blog/tag/${tag}/`}
+							class="px-3 py-1 text-sm rounded-full bg-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-accent)] hover:text-white transition-colors no-underline"
+						>
+							{tag}
+						</a>
+					))}
+				</div>
+			)}
+
+			<div class="grid md:grid-cols-2 gap-8">
+				{posts.map((post) => (
+					<a href={`/blog/${post.id}/`} class="group block no-underline">
+						{post.data.heroImage && (
+							<Image
+								width={720}
+								height={360}
+								src={post.data.heroImage}
+								alt={post.data.title}
+								class="w-full rounded-xl mb-4 group-hover:shadow-lg transition-shadow"
+								transition:name={`hero-${post.data.title}`}
+							/>
+						)}
+						<p class="text-sm text-[var(--color-text-muted)] mb-1">
+							<FormattedDate date={post.data.pubDate} />
+						</p>
+						<h2 class="text-xl font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
+							{post.data.title}
+						</h2>
+						<p class="text-[var(--color-text-muted)] mt-2 text-sm line-clamp-2">
+							{post.data.description}
+						</p>
+						{post.data.tags.length > 0 && (
+							<div class="flex flex-wrap gap-1 mt-3">
+								{post.data.tags.map((tag) => (
+									<span class="px-2 py-0.5 text-xs rounded-full bg-[var(--color-border)] text-[var(--color-text-muted)]">
+										{tag}
+									</span>
+								))}
+							</div>
+						)}
+					</a>
+				))}
+			</div>
+		</main>
+		<Footer />
+	</body>
+</html>

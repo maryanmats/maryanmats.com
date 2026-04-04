@@ -1,0 +1,77 @@
+---
+import { Image } from 'astro:assets';
+import type { CollectionEntry } from 'astro:content';
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import Header from '../components/Header.astro';
+
+type Props = CollectionEntry<'blog'>['data'] & { readingTime?: number };
+
+const { title, description, pubDate, updatedDate, heroImage, tags = [], readingTime } = Astro.props;
+---
+
+<html lang="en">
+	<head>
+		<BaseHead
+			title={`${title} | Mats Blog`}
+			description={description}
+			image={heroImage}
+			article={{
+				publishedTime: pubDate.toISOString(),
+				modifiedTime: updatedDate?.toISOString(),
+				tags,
+			}}
+		/>
+	</head>
+
+	<body class="bg-white text-[var(--color-text)]">
+		<Header />
+		<main class="max-w-3xl mx-auto px-4 py-12">
+			<article>
+				{heroImage && (
+					<div class="mb-8">
+						<Image
+							width={1020}
+							height={510}
+							src={heroImage}
+							alt={title}
+							class="w-full rounded-xl shadow-lg"
+							transition:name={`hero-${title}`}
+						/>
+					</div>
+				)}
+				<div class="mb-8 text-center">
+					<div class="flex items-center justify-center gap-3 text-sm text-[var(--color-text-muted)] mb-4">
+						<FormattedDate date={pubDate} />
+						{readingTime && <span>·</span>}
+						{readingTime && <span>{readingTime} min read</span>}
+					</div>
+					{updatedDate && (
+						<p class="text-sm text-[var(--color-text-muted)] italic mb-4">
+							Updated on <FormattedDate date={updatedDate} />
+						</p>
+					)}
+					<h1 class="text-4xl md:text-5xl font-bold leading-tight mb-4">{title}</h1>
+					{tags.length > 0 && (
+						<div class="flex flex-wrap justify-center gap-2">
+							{tags.map((tag) => (
+								<a
+									href={`/blog/tag/${tag}/`}
+									class="px-3 py-1 text-sm rounded-full bg-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-accent)] hover:text-white transition-colors no-underline"
+								>
+									{tag}
+								</a>
+							))}
+						</div>
+					)}
+					<hr class="mt-8 border-[var(--color-border)]" />
+				</div>
+				<div class="prose max-w-none">
+					<slot />
+				</div>
+			</article>
+		</main>
+		<Footer />
+	</body>
+</html>

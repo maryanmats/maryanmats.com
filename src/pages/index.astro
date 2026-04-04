@@ -1,0 +1,69 @@
+---
+import { Image } from 'astro:assets';
+import { getCollection } from 'astro:content';
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import FormattedDate from '../components/FormattedDate.astro';
+import Header from '../components/Header.astro';
+import { SITE_DESCRIPTION, SITE_TITLE } from '../consts';
+
+const posts = (await getCollection('blog', ({ data }) => !data.draft))
+	.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf())
+	.slice(0, 6);
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
+	</head>
+	<body class="bg-white text-[var(--color-text)]">
+		<Header />
+		<main class="max-w-5xl mx-auto px-4 py-12">
+			<section class="text-center mb-16">
+				<h1 class="text-5xl md:text-6xl font-bold mb-4">Mats Blog</h1>
+				<p class="text-lg text-[var(--color-text-muted)] max-w-2xl mx-auto">
+					{SITE_DESCRIPTION}
+				</p>
+			</section>
+
+			<section>
+				<h2 class="text-2xl font-bold mb-8">Latest Posts</h2>
+				<div class="grid md:grid-cols-2 gap-8">
+					{posts.map((post) => (
+						<a href={`/blog/${post.id}/`} class="group block no-underline">
+							{post.data.heroImage && (
+								<Image
+									width={720}
+									height={360}
+									src={post.data.heroImage}
+									alt={post.data.title}
+									class="w-full rounded-xl mb-4 group-hover:shadow-lg transition-shadow"
+									transition:name={`hero-${post.data.title}`}
+								/>
+							)}
+							<p class="text-sm text-[var(--color-text-muted)] mb-1">
+								<FormattedDate date={post.data.pubDate} />
+							</p>
+							<h3 class="text-xl font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
+								{post.data.title}
+							</h3>
+							<p class="text-[var(--color-text-muted)] mt-2 text-sm line-clamp-2">
+								{post.data.description}
+							</p>
+						</a>
+					))}
+				</div>
+				<div class="text-center mt-12">
+					<a
+						href="/blog"
+						class="inline-block px-6 py-3 rounded-lg bg-[var(--color-accent)] text-white font-medium no-underline hover:bg-[var(--color-accent-dark)] transition-colors"
+					>
+						All Posts
+					</a>
+				</div>
+			</section>
+		</main>
+		<Footer />
+	</body>
+</html>
