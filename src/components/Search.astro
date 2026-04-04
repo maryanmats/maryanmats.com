@@ -102,16 +102,20 @@
     const results = document.getElementById('search-results');
     if (!trigger || !modal || !input || !results || !backdrop) return;
 
+    const m = modal;
+    const inp = input;
+    const res = results;
+
     function open() {
-      modal.classList.remove('hidden');
-      input.value = '';
-      results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
-      requestAnimationFrame(() => input.focus());
+      m.classList.remove('hidden');
+      inp.value = '';
+      res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+      requestAnimationFrame(() => inp.focus());
       loadPagefind();
     }
 
     function close() {
-      modal.classList.add('hidden');
+      m.classList.add('hidden');
     }
 
     trigger.addEventListener('click', open);
@@ -120,30 +124,30 @@
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        modal.classList.contains('hidden') ? open() : close();
+        m.classList.contains('hidden') ? open() : close();
       }
       if (e.key === 'Escape') close();
     });
 
     let debounce: ReturnType<typeof setTimeout>;
-    input.addEventListener('input', () => {
+    inp.addEventListener('input', () => {
       clearTimeout(debounce);
       debounce = setTimeout(async () => {
-        const query = input.value.trim();
+        const query = inp.value.trim();
         if (!query) {
-          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
           return;
         }
 
         const pf = await loadPagefind();
         if (!pf) {
-          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
+          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
           return;
         }
 
         const search = await pf.search(query);
         if (search.results.length === 0) {
-          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">No results found.</p>';
+          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">No results found.</p>';
           return;
         }
 

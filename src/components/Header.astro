@@ -130,29 +130,31 @@ const links = [
 <script>
   function initMobileMenu() {
     const btn = document.getElementById('mobile-menu-btn');
-    const menu = document.getElementById('mobile-menu');
-    if (!btn || !menu) return;
+    const menuEl = document.getElementById('mobile-menu');
+    if (!btn || !menuEl) return;
 
     const hamburgerIcon = btn.querySelector('.hamburger-icon');
     const closeIcon = btn.querySelector('.close-icon');
+    const b = btn;
+    const m = menuEl;
 
     function toggle() {
-      const isOpen = !menu.classList.contains('hidden');
-      menu.classList.toggle('hidden');
+      const isOpen = !m.classList.contains('hidden');
+      m.classList.toggle('hidden');
       hamburgerIcon?.classList.toggle('hidden');
       closeIcon?.classList.toggle('hidden');
-      btn.setAttribute('aria-expanded', String(!isOpen));
+      b.setAttribute('aria-expanded', String(!isOpen));
     }
 
     function closeMenu() {
-      menu.classList.add('hidden');
+      m.classList.add('hidden');
       hamburgerIcon?.classList.remove('hidden');
       closeIcon?.classList.add('hidden');
-      btn.setAttribute('aria-expanded', 'false');
+      b.setAttribute('aria-expanded', 'false');
     }
 
-    btn.addEventListener('click', toggle);
-    menu.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeMenu));
+    b.addEventListener('click', toggle);
+    m.querySelectorAll('a').forEach((a) => a.addEventListener('click', closeMenu));
   }
 
   initMobileMenu();

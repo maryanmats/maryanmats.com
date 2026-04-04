@@ -21,17 +21,19 @@
     const btn = document.getElementById('back-to-top');
     if (!btn) return;
 
+    const el = btn;
+
     function toggle() {
       const show = window.scrollY > 400;
-      btn.classList.toggle('opacity-0', !show);
-      btn.classList.toggle('translate-y-4', !show);
-      btn.classList.toggle('pointer-events-none', !show);
-      btn.classList.toggle('opacity-100', show);
-      btn.classList.toggle('translate-y-0', show);
-      btn.classList.toggle('pointer-events-auto', show);
+      el.classList.toggle('opacity-0', !show);
+      el.classList.toggle('translate-y-4', !show);
+      el.classList.toggle('pointer-events-none', !show);
+      el.classList.toggle('opacity-100', show);
+      el.classList.toggle('translate-y-0', show);
+      el.classList.toggle('pointer-events-auto', show);
     }
 
-    btn.addEventListener('click', () => {
+    el.addEventListener('click', () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
 
