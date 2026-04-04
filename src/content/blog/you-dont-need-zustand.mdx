@@ -57,7 +57,7 @@ This is the bug that will never show up in your tests but will haunt your users.
 
 ### What is tearing?
 
-Since React 18, rendering is *concurrent*. React can pause mid-render to handle higher-priority work (like user input), then resume. This is what makes `startTransition` and Suspense work smoothly.
+React's rendering is *concurrent*. It can pause mid-render to handle higher-priority work (like user input), then resume. This is what makes `startTransition` and Suspense work smoothly — and it's been the default since React 18.
 
 But here's the issue. Imagine 10 components reading from the same store:
 
