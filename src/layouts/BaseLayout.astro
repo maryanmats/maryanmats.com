@@ -1,4 +1,5 @@
 ---
+import BackToTop from '../components/BackToTop.astro';
 import BaseHead from '../components/BaseHead.astro';
 import Footer from '../components/Footer.astro';
 import Header from '../components/Header.astro';
@@ -33,13 +34,14 @@ const { title, description, ogImage, article, withReadingProgress = false } = As
       <slot />
     </main>
     <Footer />
+    <BackToTop />
 
     {withReadingProgress && (
       <script>
         function initProgress() {
           const bar = document.getElementById('reading-progress');
           function update() {
-            if (!bar) return;
+            if (!bar) {return;}
             const h = document.documentElement.scrollHeight - window.innerHeight;
             bar.style.width = h > 0 ? `${(window.scrollY / h) * 100}%` : '0%';
           }

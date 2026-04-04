@@ -185,9 +185,22 @@ body {
   line-height: 1.7;
   padding: 1.25em 1.5em;
   border-radius: 8px;
-  background: var(--c-code-bg);
   border: 1px solid var(--c-line);
   overflow-x: auto;
+}
+/* Let Shiki handle light/dark backgrounds */
+.prose pre:has(> code[data-theme]) {
+  background: var(--shiki-light-bg, var(--c-code-bg));
+}
+:root.dark .prose pre:has(> code[data-theme]) {
+  background: var(--shiki-dark-bg, var(--c-code-bg));
+}
+/* Shiki dual-theme token colors */
+.prose pre code span {
+  color: var(--shiki-light);
+}
+:root.dark .prose pre code span {
+  color: var(--shiki-dark);
 }
 .prose pre code {
   background: none;

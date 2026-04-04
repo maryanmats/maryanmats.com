@@ -4,7 +4,7 @@
 <script>
   function initCopyButtons() {
     document.querySelectorAll('pre').forEach((pre) => {
-      if (pre.querySelector('.copy-btn')) return;
+      if (pre.querySelector('.copy-btn')) {return;}
 
       const btn = document.createElement('button');
       btn.className = 'copy-btn';

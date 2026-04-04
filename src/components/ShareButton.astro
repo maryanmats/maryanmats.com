@@ -27,7 +27,7 @@ const url = Astro.url.href;
   function initShare() {
     const btn = document.getElementById('share-btn');
     const label = document.getElementById('share-label');
-    if (!btn || !label) return;
+    if (!btn || !label) {return;}
 
     btn.addEventListener('click', async () => {
       const url = btn.dataset.url!;
@@ -36,7 +36,9 @@ const url = Astro.url.href;
       if (navigator.share) {
         try {
           await navigator.share({ title, url });
-        } catch {}
+        } catch {
+          // User cancelled share dialog
+        }
       } else {
         await navigator.clipboard.writeText(url);
         label.textContent = 'Copied!';

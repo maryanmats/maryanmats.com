@@ -7,6 +7,11 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   ...eslintPluginAstro.configs["flat/recommended"],
   {
+    rules: {
+      curly: ["error", "all"],
+    },
+  },
+  {
     ignores: ["dist/", ".astro/", "node_modules/"],
   },
 );
