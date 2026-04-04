@@ -143,6 +143,11 @@
       return pagefind;
     }
     try {
+      // Check if pagefind exists before importing
+      const check = await fetch('/pagefind/pagefind.js', { method: 'HEAD' });
+      if (!check.ok) {
+        return null;
+      }
       const path = '/pagefind/pagefind.js';
       pagefind = await import(/* @vite-ignore */ path);
       await pagefind!.init();
@@ -253,7 +258,7 @@
         const pf = await loadPagefind();
         if (!pf) {
           res.innerHTML =
-            '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
+            '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search is not available right now.</p>';
           return;
         }
 
