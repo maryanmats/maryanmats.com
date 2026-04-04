@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && pagefind --site dist",
+    "build": "astro build && pagefind --site dist && (cp -r dist/pagefind dist/client/pagefind 2>/dev/null || true)",
     "preview": "astro preview",
     "astro": "astro"
   },
