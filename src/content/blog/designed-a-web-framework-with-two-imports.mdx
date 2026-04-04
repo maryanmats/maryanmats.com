@@ -1,0 +1,407 @@
+---
+title: 'I Designed a Web Framework That Replaces React Hooks With Two Imports'
+description: "I spent months designing a web framework that combines signals, compilation, and islands into two imports. Here's the vision, the technical rabbit hole, and what I learned about the gap between elegant ideas and shipping software."
+pubDate: 2026-04-04
+tags: ["javascript", "react", "compiler", "signals", "typescript", "web-development"]
+draft: false
+---
+
+> **This is Part 1 of a three-part series.**
+> [Part 2: I Built a Reactive Compiler — Here's Where It Broke](/blog/building-a-reactive-compiler-for-javascript) |
+> [Part 3: Why I Stopped Building My JavaScript Framework](/blog/why-i-stopped-building-my-javascript-framework)
+
+There's a moment every frontend developer knows. You're staring at a React component, and the hook count is climbing like your electricity bill in winter.
+
+```tsx
+const [items, setItems] = useState([]);
+const [filter, setFilter] = useState('');
+const [sort, setSort] = useState('date');
+
+const filtered = useMemo(
+  () => items.filter((i) => i.name.includes(filter)),
+  [items, filter],
+);
+const sorted = useMemo(
+  () => [...filtered].sort(comparators[sort]),
+  [filtered, sort],
+);
+const total = useMemo(() => sorted.reduce((s, i) => s + i.price, 0), [sorted]);
+
+useEffect(() => {
+  document.title = `${sorted.length} items — $${total}`;
+}, [sorted.length, total]);
+```
+
+Seven hooks. For a filtered list with a page title.
+
+I looked at this code one evening and thought: _what if you could write it like this instead?_
+
+```tsx
+let items = signal([]);
+let filter = signal('');
+let sort = signal('date');
+
+const filtered = items.filter((i) => i.name.includes(filter));
+const sorted = [...filtered].sort(comparators[sort]);
+const total = sorted.reduce((s, i) => s + i.price, 0);
+
+watch(() => {
+  document.title = `${sorted.length} items — $${total}`;
+});
+```
+
+Same logic. Two imports: `signal` and `watch`. No dependency arrays. No `useMemo`. No `useCallback`. No stale closures haunting your dreams at 2 AM.
+
+That thought turned into a 1,500-line specification, months of architectural exploration, and eventually — one of the most valuable failures of my career.
+
+This is the first part of a three-part series. I'll walk you through the vision, the technical design, the impossible problems I hit, and why I ultimately abandoned the whole thing. Buckle up — it's going to be a ride.
+
+## The problem isn't React. It's the ceremony
+
+Let me be clear: React is a remarkable piece of engineering. The component model changed how we think about UIs. JSX is one of the best ideas in web development history.
+
+But React was designed in 2013. The core mental model — "your component is a function that re-runs on every state change" — has consequences that compound over time.
+
+Here's one:
+
+```tsx
+function PriceCalculator({ product }) {
+  const [qty, setQty] = useState(1);
+  const [promo, setPromo] = useState('');
+
+  const discount = promo === 'SALE50' ? 0.5 : 0;
+  const subtotal = qty * product.price;
+  const total = subtotal * (1 - discount);
+
+  return (
+    <div>
+      <h2>{product.name}</h2>
+      <input value={qty} onChange={(e) => setQty(+e.target.value)} />
+      <input value={promo} onChange={(e) => setPromo(e.target.value)} />
+      <span>{subtotal} USD</span>
+      <span>{total} USD</span>
+    </div>
+  );
+}
+```
+
+When `qty` changes from 1 to 3, here's what React does:
+
+1. **Re-executes the entire function** — all variables, all computations
+2. **Creates ~15 virtual DOM objects** — a tree describing what the UI should look like
+3. **Diffs the new tree against the old tree** — comparing every node
+4. **Finds 3 differences** — the input value, subtotal, and total
+5. **Patches 3 DOM nodes** — the actual work that needed to happen
+
+Steps 1–4 are overhead. The useful work is step 5.
+
+Now imagine you didn't re-run anything. Imagine a compiler analyzed your code at build time, saw that `subtotal` depends on `qty` and `product.price`, and generated a tiny reactive graph:
+
+```
+signal qty ──────► derived subtotal ──────► derived total
+                                                 ▲
+signal promo ──► derived discount ─────────────┘
+```
+
+When `qty` changes: `subtotal` recalculates, `total` recalculates, two text nodes update. Three DOM operations. Zero diffing. Zero virtual DOM. Zero re-rendering.
+
+**The result is the same. The path is 10x shorter.**
+
+That's the idea I couldn't get out of my head.
+
+## Every brick already exists
+
+Here's the thing that made this feel _possible_ rather than _delusional_: none of these concepts are new.
+
+- **Signals** — Solid.js proved that fine-grained reactivity without a virtual DOM isn't just possible, it's faster. `createSignal`, `createMemo`, `createEffect` — the reactive primitive model works beautifully.
+
+- **Compiler transforms** — Svelte proved that a compiler can analyze your code, track which variables are reactive, and generate optimal update instructions. Svelte 5's `$state()` takes this even further with explicit markers.
+
+- **Islands architecture** — Astro proved that most pages don't need JavaScript at all. Ship HTML. Hydrate only the interactive bits. A blog post with one "like" button doesn't need 150KB of client-side framework code.
+
+- **Server-first** — Remix (and later React Server Components) proved that data loading belongs on the server. Don't fetch-on-mount, just render with data.
+
+Each of these is a breakthrough. But each lives in its own ecosystem with its own trade-offs:
+
+| Approach     | Framework  | Trade-off                                                                          |
+| ------------ | ---------- | ---------------------------------------------------------------------------------- |
+| Signals      | Solid      | Custom `.svelte` file format (Svelte) or accessor API like `.get()/.set()` (Solid) |
+| Compilation  | Svelte     | Locked into `.svelte` format, separate toolchain                                   |
+| Islands      | Astro      | No built-in fine-grained reactivity in islands                                     |
+| Server-first | Remix/Next | Full-page hydration ships too much JS                                              |
+
+What if you could combine all four — in standard TypeScript + JSX?
+
+That's what I set out to design.
+
+## The two-import API
+
+Here's the core idea. The entire developer-facing API for reactivity fits in two words:
+
+### `signal` — reactive state
+
+```tsx
+import { signal } from 'mats';
+
+let count = signal(0);
+
+// Read it like a normal variable
+console.log(count); // 0
+
+// Write it like a normal variable
+count = 5;
+count++;
+count += 10;
+```
+
+No `.value`. No `.set()`. No `[getter, setter]` tuple. Just... a variable.
+
+The trick? The compiler transforms every read and write behind the scenes:
+
+```tsx
+// What you write:
+let count = signal(0);
+count++;
+const doubled = count * 2;
+
+// What the compiler outputs:
+const __count = __signal(0);
+__count.set(__count.get() + 1);
+const __doubled = __derived(() => __count.get() * 2);
+```
+
+You write JavaScript. The compiler makes it reactive.
+
+### `watch` — side effects
+
+```tsx
+import { watch } from 'mats';
+
+watch(() => {
+  document.title = `${count} items`;
+});
+```
+
+Auto-tracks dependencies. Re-runs when they change. Returns a cleanup function for event listeners, timers, subscriptions.
+
+That's it. Two imports. Everything else — derived computations, DOM updates, dependency tracking — is the compiler's job.
+
+### The magic of `const`
+
+This is where it gets interesting. Look at this:
+
+```tsx
+let price = signal(100);
+let qty = signal(2);
+
+const TAX_RATE = 0.2; // no signal dependency → calculated once
+const subtotal = price * qty; // depends on signals → auto-derived
+const total = subtotal * (1 + TAX_RATE); // depends on derived → auto-derived
+const label = `${total} USD`; // depends on derived → auto-derived
+```
+
+The compiler scans each `const` declaration. If the expression on the right side touches a signal (directly or through another derived value), it wraps it in `__derived()`. If not, it's a plain constant.
+
+No `useMemo`. No `computed()`. No `$derived()`. Just `const`.
+
+I know what you're thinking: "Wait, `const` in JavaScript means 'assigned once, never changes.' You're making it reactive?"
+
+Yes. And I'm fully aware that this is controversial. More on that later — it's one of the reasons this project taught me so much.
+
+## How server and client split automatically
+
+Here's where islands come in. The framework doesn't need `"use client"` or `"use server"` directives. The compiler figures it out:
+
+```tsx
+// This component has NO signals, NO watch, NO event handlers
+// → Server component. 0 KB JavaScript. Just HTML.
+function ProductCard({ product }) {
+  return (
+    <div>
+      <h2>{product.name}</h2>
+      <p>{product.description}</p>
+      <span>{product.price} USD</span>
+    </div>
+  );
+}
+
+// This component HAS a signal
+// → Automatically becomes an "island". Ships minimal JS.
+function AddToCartButton({ productId }) {
+  let adding = signal(false);
+
+  return (
+    <button
+      disabled={adding}
+      onClick={async () => {
+        adding = true;
+        await addToCart(productId);
+        adding = false;
+      }}
+    >
+      {adding ? 'Adding...' : 'Add to Cart'}
+    </button>
+  );
+}
+```
+
+No decisions to make. No directives to remember. Use `signal` → you get an interactive island. Don't use it → pure HTML, zero cost.
+
+For a typical content page with 50 components and 3 interactive ones:
+
+```
+Traditional SSR (Next.js):  All 50 components hydrate → ~80-150 KB JS
+Islands approach:           Only 3 islands hydrate   → ~5-6 KB JS
+```
+
+That's a real difference. Not in benchmarks — in user experience. On a 3G connection in rural Ukraine, 150 KB vs 6 KB is the difference between "usable" and "still loading."
+
+## Server functions without the ceremony
+
+For server-side code, I designed a convention: anything in a `server/` directory is server-only. Always. No imports from the framework needed:
+
+```tsx
+// server/catalog.ts — plain TypeScript, runs on the server
+export async function searchProducts(query: string) {
+  const res = await fetch(`${process.env.API_URL}/search?q=${query}`, {
+    headers: { Authorization: `Bearer ${process.env.API_SECRET}` },
+  });
+  return res.json();
+}
+```
+
+When an island imports this function, the compiler automatically replaces it with a fetch proxy:
+
+```tsx
+// In an island component:
+import { searchProducts } from '~/server/catalog';
+
+// The compiler turns this into:
+// const searchProducts = (query) =>
+//   fetch('/__mats/fn/catalog/searchProducts', {
+//     method: 'POST',
+//     body: JSON.stringify({ args: [query] }),
+//     headers: { 'X-CSRF-Token': __csrfToken },
+//   }).then(r => r.json());
+```
+
+CSRF protection, input validation, error handling — all automatic. The developer writes a function. The compiler builds the bridge.
+
+Compare this to the Next.js dance of `"use server"`, server actions, `revalidatePath`, and the mental gymnastics of "is this running on the server or the client right now?".
+
+## The PriceCalculator, fully compiled
+
+Let me show you what the compiler would output for our earlier example. This is where the vision comes together.
+
+**What you write:**
+
+```tsx
+import { signal } from 'mats';
+
+function PriceCalculator({ product }) {
+  let qty = signal(1);
+  let promo = signal('');
+
+  const discount = promo === 'SALE50' ? 0.5 : 0;
+  const subtotal = qty * product.price;
+  const total = subtotal * (1 - discount);
+
+  return (
+    <div>
+      <h2>{product.name}</h2>
+      <input value={qty} onInput={(e) => (qty = +e.target.value)} />
+      <input value={promo} onInput={(e) => (promo = e.target.value)} />
+      <span>{subtotal} USD</span>
+      <span>{total} USD</span>
+    </div>
+  );
+}
+```
+
+**What the compiler generates:**
+
+```js
+function PriceCalculator(__props) {
+  // 1. Signals
+  const __qty = __signal(1);
+  const __promo = __signal('');
+
+  // 2. Auto-derived (detected from const expressions)
+  const __discount = __derived(() => (__promo.get() === 'SALE50' ? 0.5 : 0));
+  const __subtotal = __derived(() => __qty.get() * __props.product.price);
+  const __total = __derived(() => __subtotal.get() * (1 - __discount.get()));
+
+  // 3. DOM — created once, never recreated
+  const div = createElement('div');
+  const h2 = createElement('h2');
+  const span1 = createElement('span');
+  const span1_text = createText('');
+  const span2 = createElement('span');
+  const span2_text = createText('');
+  // ... inputs, assembly ...
+
+  // 4. Reactive bindings — surgical DOM updates
+  __effect(() => {
+    span1_text.data = __subtotal.get() + ' USD';
+  });
+  __effect(() => {
+    span2_text.data = __total.get() + ' USD';
+  });
+  __effect(() => {
+    input1.value = __qty.get();
+  });
+
+  return div;
+}
+```
+
+When `qty` changes from 1 to 3:
+
+```
+qty.set(3)
+  │
+  ├──► subtotal recalculates: 3 * 100 = 300  → YES, changed
+  │    ├──► span1 text updates: "300 USD"      ← 1 DOM operation
+  │    └──► total recalculates: 300 * 1 = 300  → YES, changed
+  │         └──► span2 text updates: "300 USD"  ← 1 DOM operation
+  │
+  ├──► input1.value = 3                         ← 1 DOM operation
+  │
+  └──► discount does NOT recalculate (doesn't depend on qty)
+       promo does NOT recalculate
+       h2 does NOT update (static)
+
+TOTAL: 3 DOM operations. Zero diffing. Zero VDOM.
+```
+
+I won't lie — when I first sketched this out on a whiteboard (okay, in a Markdown file at 1 AM), I felt like I'd discovered something profound. The elegance was intoxicating.
+
+Everything fit together. Signals for state. Compiler for reactivity. Islands for delivery. Server functions for data. Two imports for the developer.
+
+It was beautiful.
+
+It was also the moment I should have asked: "Okay, but how hard is it to actually _build_ the compiler?"
+
+## The specification grows
+
+What started as a napkin sketch turned into a 55 KB specification. Every design decision led to three more. Every edge case revealed two siblings.
+
+How does destructuring work with signals? What happens when you spread reactive props? When should the compiler pass a signal object vs. unwrap its value? How does hydration find DOM nodes without littering the HTML with markers? How does cross-module dependency tracking interact with Vite's per-file transform pipeline?
+
+I documented everything. Every decision, every trade-off, every alternative I considered and rejected.
+
+The specification became the most thorough technical document I've ever written. And that, paradoxically, is when I started to realize I might be in trouble.
+
+But that's a story for [Part 2](/blog/building-a-reactive-compiler-for-javascript).
+
+## What's next
+
+In the next article, I'll take you into the deepest technical rabbit hole of this project: the problem of when a reactive variable should behave like an object and when it should behave like a plain value. It sounds simple. It nearly broke my brain.
+
+I'll also cover cross-module compiler analysis, TypeScript type hacking, the hydration challenge, and the moment I realized that JavaScript doesn't always play on your side.
+
+**[Part 2: I Built a Reactive Compiler for JavaScript — Here's Where It Broke →](/blog/building-a-reactive-compiler-for-javascript)**
+
+---
+
+_If you're building something ambitious and wondering whether it's genius or insanity — it's probably both. The trick is figuring out which part is which before you burn out._

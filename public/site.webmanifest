@@ -1,0 +1,16 @@
+{
+  "name": "Maryan Mats",
+  "short_name": "mats.",
+  "description": "Personal blog about React, TypeScript, and modern frontend development.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1a14",
+  "theme_color": "#1a5c38",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,62 +1,87 @@
-# Astro Starter Kit: Blog
+# maryanmats.com
+
+Personal blog and portfolio of Maryan Mats — Software Engineer, TypeScript enthusiast, and web craftsman.
+
+**Live:** [maryanmats.com](https://maryanmats.com)
+
+## Stack
+
+- [Astro 6](https://astro.build) — static site generator
+- [Tailwind CSS 4](https://tailwindcss.com) — styling
+- [MDX](https://mdxjs.com) — articles with components
+- [TypeScript](https://www.typescriptlang.org) — type safety everywhere
+- [Manrope](https://manropefont.com) + [JetBrains Mono](https://www.jetbrains.com/lp/mono/) — typography
+- [Cloudflare Pages](https://pages.cloudflare.com) — hosting
+
+## Features
+
+- Dark / light theme with system preference detection
+- Interactive 3D wireframe character (Canvas API)
+- Breadcrumbs with JSON-LD structured data
+- SEO: Open Graph, Twitter cards, sitemap, RSS, canonical URLs, robots.txt
+- Skip-to-content, ARIA labels, semantic HTML
+- Reading progress bar on articles
+- Table of contents with scroll tracking
+- Zero unused code — every component, utility, and asset is active
+
+## Project Structure
+
+```
+src/
+├── components/        # Reusable UI (Icon, Breadcrumbs, ContactLinks, etc.)
+├── content/blog/      # MDX articles
+├── data/              # Static data (projects)
+├── layouts/           # BaseLayout, BlogPost
+├── pages/             # Routes (/, /blog, /projects, /about, /404)
+├── styles/            # global.css (Tailwind + design tokens)
+└── utils/             # Helpers (reading-time, posts)
+public/
+├── favicon.svg        # Adaptive dark/light favicon
+├── og.png             # Open Graph social image (1200×630)
+├── robots.txt         # Crawl rules + sitemap link
+└── site.webmanifest   # PWA manifest
+```
+
+## Development
 
 ```sh
-npm create astro@latest -- --template blog
+npm install
+npm run dev       # → localhost:4321
 ```
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Build
 
-Features:
-
-- ✅ Minimal styling (make it your own!)
-- ✅ 100/100 Lighthouse performance
-- ✅ SEO-friendly with canonical URLs and Open Graph data
-- ✅ Sitemap support
-- ✅ RSS Feed support
-- ✅ Markdown & MDX support
-
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
-
-```text
-├── public/
-├── src/
-│   ├── components/
-│   ├── content/
-│   ├── layouts/
-│   └── pages/
-├── astro.config.mjs
-├── README.md
-├── package.json
-└── tsconfig.json
+```sh
+npm run build     # → dist/
+npm run preview   # preview locally
 ```
 
-Astro looks for `.astro` or `.md` files in the `src/pages/` directory. Each page is exposed as a route based on its file name.
+## Writing Articles
 
-There's nothing special about `src/components/`, but that's where we like to put any Astro/React/Vue/Svelte/Preact components.
+Create a `.mdx` file in `src/content/blog/`:
 
-The `src/content/` directory contains "collections" of related Markdown and MDX documents. Use `getCollection()` to retrieve posts from `src/content/blog/`, and type-check your frontmatter using an optional schema. See [Astro's Content Collections docs](https://docs.astro.build/en/guides/content-collections/) to learn more.
+```mdx
+---
+title: 'Article Title'
+description: 'A short description for SEO.'
+pubDate: 'Apr 04 2026'
+tags: ['typescript', 'react']
+---
 
-Any static assets, like images, can be placed in the `public/` directory.
+Your content here.
+```
 
-## 🧞 Commands
+The filename becomes the URL slug: `my-article.mdx` → `/blog/my-article/`
 
-All commands are run from the root of the project, from a terminal:
+## Deploy
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+Connected to Cloudflare Pages via GitHub. Push to `main` → auto-deploy.
 
-## 👀 Want to learn more?
+Build settings:
+- **Build command:** `npm run build`
+- **Output directory:** `dist`
+- **Node.js version:** `22`
 
-Check out [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+## License
 
-## Credit
-
-This theme is based off of the lovely [Bear Blog](https://github.com/HermanMartinus/bearblog/).
+Code is open source. Content (articles) is copyrighted.

@@ -1,0 +1,233 @@
+---
+title: "Why I Stopped Building My JavaScript Framework After 1,500 Lines of Spec"
+description: "I spent months designing a web framework with a 1,500-line specification, elegant compiler transforms, and a genuine shot at improving frontend development. Then I did the math. Here's what killing your darling teaches you about software engineering."
+pubDate: 2026-04-04
+tags: ["javascript", "react", "compiler", "signals", "typescript", "web-development"]
+draft: false
+---
+
+> **This is Part 3 of a three-part series.**
+> [Part 1: I Designed a Web Framework With Two Imports](/blog/designed-a-web-framework-with-two-imports) |
+> [Part 2: I Built a Reactive Compiler — Here's Where It Broke](/blog/building-a-reactive-compiler-for-javascript)
+
+In [Part 1](/blog/designed-a-web-framework-with-two-imports), I showed you the vision: a web framework where two imports replace twenty, the compiler does the heavy lifting, and islands keep your JavaScript budget honest.
+
+In [Part 2](/blog/building-a-reactive-compiler-for-javascript), I took you through the technical depth: the Transfer vs. Expression problem, cross-module compiler analysis, TypeScript type hacks, and the growing list of edge cases that made the specification simultaneously more impressive and more terrifying.
+
+Now it's time to tell you why I stopped.
+
+Not because the ideas were bad — they weren't. Not because I lost interest — I didn't. I stopped because I finally understood something that every senior engineer knows but nobody teaches you: **the distance between "I know exactly how this should work" and "someone can `npm install` this" is measured in person-years, not pages.**
+
+## The spreadsheet of doom
+
+One evening, I opened a fresh document and listed every component of the MVP. Not the hand-wavy "compiler, runtime, server" version from the spec. The actual work:
+
+| Component | Estimated effort | Why it's hard |
+|-----------|-----------------|---------------|
+| Two-pass cross-module compiler | 4-6 months | Scope analysis, closures, async, re-exports, barrel files, circular deps |
+| Signal + derived + effects runtime | 2-3 months | Glitch-free batching, dynamic dependency tracking, memory management |
+| `.mut()` with Immer-like drafts | 1-2 months | Structural sharing, proxy traps, rollback on throw |
+| Hydration engine | 2-3 months | Tree walking, browser normalization, comment markers, extension resilience |
+| SSR pipeline | 2-3 months | Async components, streaming, request deduplication, serialization |
+| Server function proxy + CSRF | 1-2 months | Code generation, validation from TS types, error propagation |
+| File-based router + layouts + middleware | 1-2 months | Dynamic segments, catch-all routes, nested layouts |
+| DOM morphing for navigation | 1-2 months | Focus preservation, scroll restoration, form state, media playback |
+| CSS scoping + dead code elimination | 1-2 months | Another compiler pass, specificity handling, critical CSS |
+| HMR with signal state preservation | 1-2 months | Module graph invalidation, component boundary detection |
+| CLI + dev server + error overlay | 1 month | Vite integration, diagnostic formatting |
+| TypeScript types without plugins | 1 month | And then building the plugin anyway for edge cases |
+
+**Conservative total: 18-29 months of full-time work.**
+
+For one person with a day job, working evenings and weekends, call it 3-5 years.
+
+I stared at that spreadsheet for a long time. Then I did something I should have done months earlier: I looked at who else had tried this.
+
+## Every framework has a story you don't see
+
+**Svelte.** Rich Harris started working on it in 2016. Seven years and four major versions later, Svelte 5 shipped with compiler-based signal transforms (`$state`, `$derived`). Not Rich alone — a core team of 5+ engineers, backed by Vercel (a company with hundreds of millions in funding), with thousands of community contributors stress-testing every edge case. The compiler alone is tens of thousands of lines of code.
+
+And Rich Harris isn't some random developer. He built D3 components at *The New York Times*, created Rollup (one of the most used JavaScript bundlers), and is one of the most recognized figures in web development. He gave the talks. He built the community. He spent years earning the trust that makes people try a new framework.
+
+**Solid.** Ryan Carniato worked on it for five years before version 1.0. Five years of evenings and weekends while holding a full-time job. He's now full-time at Netlify, with a team building SolidStart (the meta-framework). When I read Solid's source code, I see the scars of every edge case I documented in my spec — and a hundred more I hadn't thought of.
+
+**Astro.** Founded by Fred K. Schott with venture capital funding, a team of 10+ full-time engineers, a dedicated documentation team, and community managers. Even with those resources, Astro 1.0 took about 18 months.
+
+**Qwik.** Created by Misko Hevery — the person who built *Angular*. Backed by Builder.io with a full engineering team. Even with Misko's decades of framework experience and corporate resources, Qwik still struggles with adoption.
+
+See the pattern? Every successful framework has an *organization* behind it. Not just code — an organization. Funding, or full-time employment, or both. A team, not a person. Conference talks, blog posts, Discord communities, Stack Overflow answers, tutorials, example repos, deployment guides, migration paths.
+
+I had a Markdown file.
+
+## The 80% trap
+
+Here's the thought that seduced me for weeks: "I could build 80% of the MVP in three months. Ship something, get feedback, iterate."
+
+This is the most dangerous thought in software engineering. Because **80% of a framework is 0% of a framework.**
+
+Think about it. If the compiler handles 80% of signal transforms correctly but crashes on async closures inside `.map()` callbacks — nobody can use it. If hydration works for 80% of HTML structures but breaks on `<table>` elements — the first person who renders a data table files a bug and walks away. If cross-module tracking resolves 80% of import patterns but fails on barrel files — every project with a `components/index.ts` is broken on day one.
+
+Frameworks don't degrade gracefully. They either work for your use case or they don't. And every developer's use case is a unique snowflake that includes at least one of the 20% of patterns you haven't implemented yet.
+
+React can afford edge cases because it has a decade of production battle-testing and a team at Meta whose full-time job is fixing them. I would be a single person responding to GitHub issues at 11 PM after a full workday, trying to figure out why someone's `const { data } = useQuery()` isn't reactive inside a `Promise.all()` callback that's wrapped in a `try/catch` inside an `async` IIFE.
+
+I could feel the burnout from here, and I hadn't written a single line of implementation code.
+
+## The ecosystem problem
+
+Let's say I somehow built the framework. Let's say it works. A developer installs it, creates a project, and starts building a real application. They need:
+
+- **Authentication.** NextAuth, Clerk, Lucia — none work with my framework. Custom integration needed.
+- **UI components.** Shadcn, Radix, Headless UI — all React-specific. Start from scratch.
+- **Database.** Prisma and Drizzle are framework-agnostic, but the integration patterns (types, server functions) need to be built.
+- **Deployment.** I had "deployment adapters" in my post-MVP list. Translation: on launch day, there's no way to deploy to Vercel, Netlify, Cloudflare, or AWS.
+- **Error tracking.** Sentry integration? Doesn't exist.
+- **Analytics.** Custom event tracking? Manual.
+
+A framework without an ecosystem is like a city with roads but no buildings. Technically impressive, practically uninhabitable.
+
+And here's the chicken-and-egg problem: nobody writes libraries for a framework with no users, and nobody uses a framework with no libraries. Every successful framework broke this cycle somehow — React through Facebook's internal adoption, Vue through exceptional documentation and gradual adoption from jQuery projects, Svelte through Rich Harris's media presence and Vercel's backing.
+
+My plan for breaking this cycle was... well, I didn't have one. That should have been a sign.
+
+## What the specification actually was
+
+Here's where the story turns.
+
+For weeks after the spreadsheet, I felt like I'd wasted months of my life. All those late nights spent on a framework that would never exist. All that careful documentation of edge cases nobody would ever encounter. A 55 KB monument to overambition.
+
+Then I realized I was looking at it wrong.
+
+The specification wasn't a failed framework. It was the most thorough education in web platform engineering I could have given myself.
+
+Before writing it, I knew *how to use* React, Solid, Svelte, Astro. After writing it, I understood *why they work the way they do*. Every frustrating API decision, every seemingly arbitrary limitation, every "why can't they just..." — I now had the answer. Because building the alternative is orders of magnitude harder than it looks.
+
+Let me give you specific examples.
+
+## Lesson 1: Every "unnecessary" API has a body count behind it
+
+Remember how I dismissed `useMemo`, `$derived()`, and `computed()` as boilerplate? My framework would have auto-derived `const` — the compiler would just *know*.
+
+Then I discovered that auto-derived `const` changes the semantics of JavaScript. `const x = a * b` in standard JS means "compute once." In my framework, it means "recompute whenever dependencies change." Terser (a popular minifier) could inline or eliminate these expressions because it assumes `const` means `const`. ESLint rules would give wrong advice. Code reviewers would misunderstand behavior.
+
+Svelte 5 uses `$derived()` not because they couldn't figure out auto-detection, but because **explicitness prevents an entire category of bugs.** The "boilerplate" is the feature. It tells humans and tools "this expression re-runs."
+
+I thought I was removing ceremony. I was removing clarity.
+
+## Lesson 2: Edge cases ARE the product
+
+My specification described the happy path beautifully. PriceCalculator worked. Counter worked. TodoMVC would have worked.
+
+But frameworks aren't judged by their demos. They're judged by what happens when:
+
+- A developer uses a browser extension that injects DOM nodes
+- An async operation completes after the component unmounts
+- A library passes your signal through `JSON.stringify`
+- Two islands import the same shared signal module
+- A circular dependency exists between server functions
+- The SSR output differs from the client due to timezone differences
+- `Intl.DateTimeFormat` returns different strings on the server and the browser
+
+For each of these, React has a documented solution (or at least a documented known issue). For my framework, each would be an undefined behavior discovered in production.
+
+Senior engineers don't estimate a project by counting the happy-path features. They estimate it by counting the edge cases. My specification had 28 features and approximately zero edge case resolutions.
+
+## Lesson 3: The compiler is not a free lunch
+
+Compiler-based frameworks (Svelte, Solid to some degree, Qwik) feel magical. You write simple code, the compiler outputs optimized code. Everybody wins.
+
+What I learned: the compiler is a *trade*. You get performance and DX. You pay with:
+
+- **Debuggability.** The code in your editor isn't the code that runs. Stack traces point to generated code. `console.log` shows internal signal objects, not your variables.
+- **Tooling compatibility.** Every tool in the JavaScript ecosystem — linters, formatters, bundlers, test runners, coverage tools — assumes standard JS semantics. A compiler that changes `const` semantics breaks assumptions everywhere.
+- **Error messages.** When something goes wrong, is it your code or the compiler's output? The error occurs in generated code. You need source maps, custom error formatting, and a mental model of what the compiler did.
+- **Contribution barrier.** An open-source runtime (React, Vue) can be debugged by anyone who reads JavaScript. An open-source compiler requires understanding AST transforms, scope analysis, code generation, and source maps. The contributor pool is 10x smaller.
+
+This doesn't mean compilers are wrong. Svelte and Solid prove they're powerful. It means that *building* a compiler-based framework is 10x harder than building a runtime-based one, and I was already looking at 2-3 years for a runtime-based scope.
+
+## Lesson 4: Design is easy, survival is hard
+
+I could design an API in an afternoon. A beautiful, minimal, orthogonal API that solves real problems elegantly.
+
+But a framework isn't an API. It's:
+
+- Code + documentation + tutorials + migration guides
+- Community + Discord + GitHub issues + Stack Overflow answers
+- Conference talks + blog posts + video courses + podcasts
+- Deployment adapters + starter templates + example repos
+- Security patches + breaking change management + LTS policy
+- A person (or team) who responds when something breaks at 3 AM
+
+Vue succeeded not because it was technically superior to React, but because Evan You wrote *the best framework documentation in the history of open source* and personally answered thousands of community questions. Astro succeeded not because islands are a novel concept, but because they found the right niche ("the web framework for content-driven websites") and executed relentlessly on developer experience.
+
+The specification was the easiest 10% of the work. The other 90% is what separates an idea from a product.
+
+## Lesson 5: Understanding "how" is not wasted
+
+This is the lesson that took longest to internalize, and it's the one I'm most grateful for.
+
+After I closed the specification for the last time, I went back to my day job writing React. And everything looked different.
+
+When a colleague asked "why does React re-render the whole component?", I could explain *exactly* what the alternative looks like and why React's team made the trade-offs they did.
+
+When I reviewed a PR that used `useMemo` for a simple derived value, I felt a twinge of recognition — and a deeper appreciation for why explicit derivation markers exist.
+
+When I read about React Server Components and `"use client"`, I didn't roll my eyes. I understood the Transfer vs. Expression problem from the inside. I knew that the boundary between server and client code is fundamentally a compiler problem, and every solution has the same constraints I'd mapped in my specification.
+
+When a junior developer asked me "should we use Astro or Next.js for this project?", I didn't give a surface-level answer about "static vs. dynamic." I explained islands architecture, hydration costs, JavaScript budgets — with the kind of depth that only comes from having tried to build the alternative yourself.
+
+The specification didn't ship. The knowledge did.
+
+## Lesson 6: Know when the spec is the product
+
+Here's a realization that surprised me: the specification itself had value. Not as a framework blueprint, but as *a way of thinking about web platform trade-offs*.
+
+Every design decision was a miniature essay on the tension between DX and performance, between magic and explicitness, between compiler power and JavaScript semantics. The "rejected alternatives" sections — where I explained why each option fails — were more educational than any blog post I'd ever read about framework internals.
+
+If I'd started writing code on day one instead of specifying, I would have hit each problem blindly, one at a time, over months. The specification let me hit them all in weeks, on paper, where the cost of a wrong decision is deleting a paragraph rather than rewriting a compiler pass.
+
+Sometimes the spec is the product. Sometimes understanding the problem *is* the solution.
+
+## What I'd do differently
+
+If I could go back to the evening when I first sketched `let count = signal(0)` on my screen, I wouldn't tell myself to stop. The exploration was worth it. But I'd change the path:
+
+1. **Build a proof-of-concept first, specify later.** Write the simplest possible Vite plugin that transforms `signal()` in a single file. No cross-module analysis, no hydration, no server functions. See how far the basic transform gets. Hit real problems before theoretical ones.
+
+2. **Scope the MVP to one idea, not all four.** "Signals + compilation + islands + server-first" is four frameworks. Pick one. A Vite plugin that adds auto-derived `const` to any existing framework would be genuinely useful and shippable in weeks.
+
+3. **Find one other person.** Not ten. Not a team. One person who's excited enough to pair on a compiler pass. The difference between 1 and 2 people on a project like this isn't 2x — it's 10x, because you have someone to test your assumptions against.
+
+4. **Write the blog posts first.** Seriously. "Here's a problem with React, here's how a compiler could solve it, here's a proof-of-concept" would have gotten more feedback than a private specification ever could. The community would have told me which ideas were worth pursuing and which were dead ends — before I spent months documenting dead ends.
+
+## The file is still there
+
+The specification lives in my repository. `project-idea.md`. 1,500 lines. 55 KB.
+
+Sometimes I open it. I read the section on Transfer vs. Expression, and I still think it's one of the clearest explanations of a compiler boundary I've ever written. I read the hydration section, and I appreciate how thoroughly I documented each marker type. I read the reactive batching section, and I notice the push-pull contradiction I never resolved.
+
+I don't feel failure when I read it. I feel something closer to the way you feel about a really good trip. I went somewhere, I saw things clearly, and I came back changed.
+
+## The part where I tell you what to do
+
+If you're reading this and you have your own ambitious side project — a framework, a language, a tool, a library that will change everything — I'm not going to tell you to stop. I don't know your situation, your skills, or your ambition. Maybe you're the next Rich Harris. Somebody has to be.
+
+But I'll tell you what I wish someone had told me:
+
+**The strength of your vision is not evidence of your capacity to execute it.** Understanding exactly how something should work is a necessary condition for building it, but it's not a sufficient one. The gap between the two is filled with time, money, people, and stamina. Be honest about how much of each you have.
+
+**A shipped proof-of-concept teaches you more than an unshipped specification.** My specification was thorough. A working prototype of just the signal transform would have been more valuable, because real code reveals problems that paper hides.
+
+**The best outcome of an abandoned project isn't the project. It's you.** I am a measurably better engineer than I was before this project. I understand compilers, reactive systems, hydration, and framework design at a depth I couldn't have reached by reading documentation or watching conference talks. That understanding compounds every day I write code, review PRs, and mentor others.
+
+And finally:
+
+**The framework landscape doesn't need another framework. It needs engineers who understand why the existing ones work the way they do.** When you deeply understand React's trade-offs, you use React better. When you understand why Svelte chose `$derived()`, you appreciate explicitness. When you understand why Astro exists, you pick the right tool for the right job.
+
+I set out to build a framework. I built something better — a mental model of the entire web platform that I carry with me into every project, every code review, every architectural decision.
+
+The best code I ever wrote was the code I decided not to ship.
+
+---
+
+*This is Part 3 of a three-part series. [Part 1](/blog/designed-a-web-framework-with-two-imports) covers the vision and API design. [Part 2](/blog/building-a-reactive-compiler-for-javascript) covers the technical deep dive. Thanks for reading the whole journey.*

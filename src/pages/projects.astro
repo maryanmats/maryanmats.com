@@ -1,0 +1,84 @@
+---
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import Icon from '../components/Icon.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { SITE_TITLE } from '../consts';
+import { projects } from '../data/projects';
+---
+
+<BaseLayout title={`Projects — ${SITE_TITLE}`} description="Things I've built.">
+  <div class="max-w-5xl mx-auto w-full px-6 py-14">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="Projects" />
+
+    <header class="mb-14 animate-fade-up">
+      <h1
+        class="font-display text-4xl md:text-5xl font-800 tracking-tight mb-3"
+      >
+        Projects
+      </h1>
+      <p class="text-ink-muted max-w-lg">
+        A selection of things I've built and contributed to.
+      </p>
+    </header>
+
+    <div class="space-y-5">
+      {
+        projects.map((project, i) => (
+          <a
+            href={project.href}
+            target="_blank"
+            rel="noopener"
+            class="project-row group block rounded-2xl border border-line bg-panel p-6 md:p-8 hover:border-green/30 transition-all duration-300 no-underline animate-fade-up"
+            style={`animation-delay: ${80 + i * 60}ms;`}
+          >
+            <div class="flex flex-col md:flex-row md:items-start gap-5 md:gap-8">
+              <div class="flex items-start gap-4 md:w-52 shrink-0">
+                <div class="w-10 h-10 rounded-xl bg-green/10 flex items-center justify-center shrink-0 group-hover:bg-green/15 transition-colors">
+                  <Icon name="code" class="w-5 h-5 text-green" />
+                </div>
+                <div>
+                  <h2 class="font-display text-lg font-700 text-ink group-hover:text-green transition-colors duration-200 leading-tight">
+                    {project.title}
+                  </h2>
+                  <div class="flex items-center gap-2 mt-1">
+                    <span
+                      class:list={[
+                        'px-2 py-0.5 text-[10px] font-mono rounded-full border',
+                        project.status === 'Live'
+                          ? 'border-green/30 text-green bg-green/5'
+                          : 'border-line text-ink-faint bg-tag-bg',
+                      ]}
+                    >
+                      {project.status}
+                    </span>
+                    <span class="text-[10px] font-mono text-ink-faint">
+                      {project.year}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm text-ink-muted leading-relaxed mb-4">
+                  {project.description}
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                  {project.tech.map((t) => (
+                    <span class="px-2.5 py-0.5 text-[10px] font-mono rounded-md bg-tag-bg text-ink-faint border border-line/50">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div class="hidden md:flex items-center self-center shrink-0">
+                <Icon
+                  name="arrow-external"
+                  class="w-4 h-4 text-ink-faint group-hover:text-green group-hover:translate-x-0.5 transition-all duration-200"
+                />
+              </div>
+            </div>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</BaseLayout>

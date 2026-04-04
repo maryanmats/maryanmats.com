@@ -1,0 +1,9 @@
+---
+interface Props {
+  message?: string;
+}
+
+const { message = 'Nothing here yet. Stay tuned.' } = Astro.props;
+---
+
+<p class="text-sm text-ink-faint font-mono py-12">{message}</p>

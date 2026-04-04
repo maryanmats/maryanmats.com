@@ -1,9 +1,136 @@
 ---
-const today = new Date();
+import Icon from './Icon.astro';
+
+const year = new Date().getFullYear();
+
+const nav = [
+  { href: '/', label: 'Home' },
+  { href: '/blog', label: 'Blog' },
+  { href: '/projects', label: 'Projects' },
+  { href: '/about', label: 'About' },
+];
+
+const social = [
+  {
+    href: 'https://github.com/maryanmats',
+    label: 'GitHub',
+    icon: 'github' as const,
+  },
+  {
+    href: 'https://linkedin.com/in/maryan-mats',
+    label: 'LinkedIn',
+    icon: 'linkedin' as const,
+  },
+  {
+    href: 'https://t.me/maryanmats',
+    label: 'Telegram',
+    icon: 'telegram' as const,
+  },
+];
 ---
 
-<footer class="border-t border-[var(--color-border)] py-8 mt-16">
-	<div class="max-w-5xl mx-auto px-4 text-center text-sm text-[var(--color-text-muted)]">
-		<p>&copy; {today.getFullYear()} Mats Blog. All rights reserved.</p>
-	</div>
+<footer class="mt-20 border-t border-line">
+  <div class="max-w-5xl mx-auto px-6 py-10">
+    <div class="flex flex-col sm:flex-row gap-8 sm:gap-16 mb-8">
+      <!-- Navigation -->
+      <nav aria-label="Footer navigation">
+        <p
+          class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.15em] mb-3"
+        >
+          Navigation
+        </p>
+        <ul class="space-y-1.5">
+          {
+            nav.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  class="text-xs text-ink-muted hover:text-green no-underline transition-colors"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </nav>
+
+      <!-- Connect -->
+      <div>
+        <p
+          class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.15em] mb-3"
+        >
+          Connect
+        </p>
+        <ul class="space-y-1.5">
+          {
+            social.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-green no-underline transition-colors"
+                >
+                  <Icon name={link.icon} class="w-3.5 h-3.5" />
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+          <li>
+            <a
+              href="mailto:matsmaryan@gmail.com"
+              class="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-green no-underline transition-colors"
+            >
+              <Icon name="mail" class="w-3.5 h-3.5" />
+              Email
+            </a>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Resources -->
+      <div>
+        <p
+          class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.15em] mb-3"
+        >
+          Resources
+        </p>
+        <ul class="space-y-1.5">
+          <li>
+            <a
+              href="/rss.xml"
+              class="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-green no-underline transition-colors"
+            >
+              <Icon name="rss" class="w-3.5 h-3.5" />
+              RSS Feed
+            </a>
+          </li>
+          <li>
+            <a
+              href="/sitemap-index.xml"
+              class="text-xs text-ink-muted hover:text-green no-underline transition-colors"
+              >Sitemap</a
+            >
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Bottom bar -->
+    <div
+      class="pt-6 border-t border-line/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] font-mono text-ink-faint"
+    >
+      <p>&copy; {year} Maryan Mats. All rights reserved.</p>
+      <p>
+        Built with <a
+          href="https://astro.build"
+          target="_blank"
+          rel="noopener"
+          class="text-ink-muted hover:text-green no-underline transition-colors"
+          >Astro</a>
+      </p>
+    </div>
+  </div>
 </footer>

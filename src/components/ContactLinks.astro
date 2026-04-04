@@ -1,0 +1,47 @@
+---
+import Icon from './Icon.astro';
+
+const links = [
+  {
+    href: 'mailto:matsmaryan@gmail.com',
+    label: 'matsmaryan@gmail.com',
+    icon: 'mail' as const,
+  },
+  {
+    href: 'https://github.com/maryanmats',
+    label: 'github.com/maryanmats',
+    icon: 'github' as const,
+  },
+  {
+    href: 'https://linkedin.com/in/maryan-mats',
+    label: 'linkedin.com/in/maryan-mats',
+    icon: 'linkedin' as const,
+  },
+  {
+    href: 'https://t.me/maryanmats',
+    label: 't.me/maryanmats',
+    icon: 'telegram' as const,
+  },
+];
+---
+
+<ul class="space-y-2.5">
+  {
+    links.map((link) => (
+      <li>
+        <a
+          href={link.href}
+          target={link.href.startsWith('mailto') ? undefined : '_blank'}
+          rel={link.href.startsWith('mailto') ? undefined : 'noopener'}
+          class="group flex items-center gap-3 text-ink-muted no-underline hover:text-green transition-colors"
+        >
+          <Icon
+            name={link.icon}
+            class="w-4 h-4 text-ink-faint group-hover:text-green transition-colors"
+          />
+          <span class="font-mono text-xs">{link.label}</span>
+        </a>
+      </li>
+    ))
+  }
+</ul>

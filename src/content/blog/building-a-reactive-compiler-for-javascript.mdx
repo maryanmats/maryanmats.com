@@ -1,0 +1,404 @@
+---
+title: "I Built a Reactive Compiler for JavaScript — Here's Where It Broke"
+description: "When should a reactive variable behave like an object and when like a value? This question led me through compiler theory, TypeScript hacks, hydration nightmares, and the realization that specification-by-example always has gaps."
+pubDate: 2026-04-04
+tags: ["javascript", "compiler", "signals", "typescript", "react", "web-development"]
+draft: false
+---
+
+> **This is Part 2 of a three-part series.**
+> [Part 1: I Designed a Web Framework With Two Imports](/blog/designed-a-web-framework-with-two-imports) |
+> [Part 3: Why I Stopped Building My JavaScript Framework](/blog/why-i-stopped-building-my-javascript-framework)
+
+In [Part 1](/blog/designed-a-web-framework-with-two-imports), I showed you the vision: a framework where you write `let count = signal(0)`, `const doubled = count * 2`, and the compiler handles the rest. Two imports, zero ceremony, Solid-level performance with React-like syntax.
+
+It was elegant. It was exciting. And it immediately raised a question that nearly broke my brain.
+
+## The question that changes everything
+
+Consider this innocent-looking code:
+
+```tsx
+let count = signal(0);
+
+// Case 1: Returning from a composable
+function useCounter() {
+  return { count };
+}
+
+// Case 2: Logging
+console.log(count);
+
+// Case 3: Passing to a child component
+<Display value={count} />
+
+// Case 4: Arithmetic
+const doubled = count * 2;
+```
+
+In all four cases, `count` appears as a plain variable. But the compiler needs to do *completely different things* depending on where it appears:
+
+- **Case 1 (return):** Should pass the signal *object* — so the call site can still subscribe to changes
+- **Case 2 (log):** Should pass the *current value* — `console.log` doesn't know what a signal is
+- **Case 3 (JSX prop):** Should pass the signal *object* — so the child component re-renders when it changes
+- **Case 4 (arithmetic):** Should pass the *current value* — you can't multiply a signal object by 2
+
+Same variable. Four different behaviors. Welcome to the Transfer vs. Expression problem.
+
+## The principle behind the rule
+
+After weeks of thinking about this (and filling a notebook with diagrams that would alarm any psychologist), I found a clean principle:
+
+> **Transfer the signal object only where the compiler controls both sides of the boundary.**
+
+Let me explain what this means:
+
+**Transfer positions** — the compiler transforms both the sender and receiver:
+
+```
+1. return count         → return __count (signal object)
+   const { count } = useCounter()  → compiler transforms this too ✓
+
+2. return { count }     → return { count: __count }
+   const { count } = useCounter()  → compiler transforms this too ✓
+
+3. <Child val={count}/> → <Child __props={{ get val() { return __count.get() } }} />
+   function Child({ val }) → compiler transforms prop access too ✓
+```
+
+**Expression positions** — the compiler can't control the other side:
+
+```
+1. console.log(count)   → console.log(__count.get())
+   // console.log is native code, compiler can't touch it ✗
+
+2. someLib.process(count) → someLib.process(__count.get())
+   // third-party code, compiler can't touch it ✗
+
+3. count * 2             → __count.get() * 2
+   // multiplication operator expects a number, not an object ✗
+
+4. `${count} items`      → `${__count.get()} items`
+   // template literal coercion, not compiler-controlled ✗
+```
+
+The insight is almost philosophical: **a compiler can only be "magic" within its own jurisdiction.** The moment data crosses into code the compiler doesn't control — native APIs, third-party libraries, JavaScript operators — the magic must resolve into plain values.
+
+This isn't arbitrary. It's a *consequence* of what compilation means.
+
+## Why this matters (and why it's dangerous)
+
+This rule has an uncomfortable implication. Watch what happens when you refactor:
+
+```tsx
+let count = signal(0);
+
+// Version 1: Works — count is in a derived expression
+const doubled = count * 2; // → __derived(() => __count.get() * 2) ✓
+
+// Version 2: Broken — extract to function
+function double(n) { return n * 2; }
+const doubled = double(count); // → double(__count.get()) ✗ NOT reactive!
+```
+
+A perfectly reasonable refactoring — "extract expression into a function" — silently kills reactivity. Because `count` in a function argument is an expression position (the compiler can't control what `double()` does with it), it unwraps to a plain value. The derived computation runs once and never updates.
+
+This is the kind of thing that makes you stare at the ceiling for an hour. You've designed a system where *extracting a function* changes behavior. Every linting rule, every code review instinct, every IDE refactoring shortcut becomes potentially dangerous.
+
+Svelte 5 solved this by requiring explicit `$derived()` — making it clear where reactive computation happens. I rejected `$derived()` as "boilerplate" in my initial design. Now I was paying for that choice.
+
+## Cross-module analysis: two passes, infinite edge cases
+
+The compiler needs to know which variables are signals — not just in the current file, but across the entire project. If `useCounter()` in `lib/counter.ts` returns a signal, the consuming file needs to know.
+
+I designed a two-pass system:
+
+```
+Pass 1: Scan ALL files → collect metadata
+  - Which exports are signals?
+  - Which functions return signals?
+  - Which files import signal-creating code?
+
+Pass 2: Transform each file using Pass 1 metadata
+  - Now we know that `count` from `useCounter()` is a signal
+  - Transform accordingly
+```
+
+Sounds clean, right? Now consider reality:
+
+**Barrel files:**
+
+```tsx
+// lib/index.ts
+export * from './counter';
+export * from './timer';
+export * from './auth';
+// 50 more re-exports...
+```
+
+Pass 1 must recursively resolve every `export *`, including circular re-exports, to determine which symbols carry signal metadata. For a large project, this is `O(n * m)` where n is files and m is symbols.
+
+**Dynamic imports:**
+
+```tsx
+const mod = await import(`./stores/${storeName}`);
+mod.count++; // Is this a signal? 🤷
+```
+
+The compiler can't statically determine what `storeName` will be at runtime. This is fundamentally unsolvable with static analysis.
+
+**The Vite problem:**
+
+This was the showstopper I didn't see coming. I had "Build tool: Vite" in my implementation plan. But Vite's plugin API calls `transform()` *per file*. Each file is transformed independently. My two-pass cross-module analysis requires seeing *all files* before transforming *any file*.
+
+This means either:
+
+1. **Don't use Vite** — build a custom pipeline (months of work, lose the entire Vite ecosystem)
+2. **Work around Vite** — cache metadata between transforms, handle invalidation (fragile, hard to debug)
+3. **Limit cross-module tracking** — only track signals within component files (lose the composables story)
+
+None of these options is good. TypeScript itself took years to build program-wide analysis, and it's still slow on large projects. I was planning to replicate this as a side project.
+
+## The TypeScript trick (and its lies)
+
+For the developer experience to work, TypeScript needs to understand signal types without custom plugins. I came up with an intersection type hack:
+
+```tsx
+function signal<T>(value: T): T & {
+  mut: (fn: (draft: T) => void) => void;
+  peek: () => T
+};
+
+let count = signal(0);
+// type: number & { mut, peek }
+
+count++;         // number++ → works ✓
+count * 2;       // number * 2 → works ✓
+count.peek();    // .peek() method → works ✓
+count.mut(d => d + 1); // .mut() method → works ✓
+```
+
+TypeScript is happy. The IDE gives you autocomplete. No plugins needed. I was unreasonably proud of this.
+
+Then I tried:
+
+```tsx
+function identity<T>(x: T): T {
+  return x;
+}
+
+const result = identity(count);
+// TypeScript says: type is number & { mut, peek }
+// Reality: identity(__count.get()) returns a plain number
+// result.peek() → runtime error 💥
+// TypeScript won't warn you
+```
+
+The intersection type is what I called a "compile-time fiction." It works perfectly inside the compiler's jurisdiction — components, composables, JSX. But the moment a signal touches generic code that the compiler doesn't transform, the type lies.
+
+Svelte 5 started with a similar approach and eventually built a custom language server (`svelte-language-tools`). The "no plugins needed" claim was true for the happy path. For real-world code with generics, utility functions, and library interop — you'd need exactly the plugin I said wasn't necessary.
+
+Lesson learned: if your types describe something that *doesn't exist at runtime*, someone will eventually call `.peek()` on a plain number and file a very confused bug report.
+
+## Hydration: finding DOM nodes in a haystack
+
+Server-side rendering generates HTML. The browser parses it into a DOM tree. Now JavaScript needs to find the specific text node that shows `subtotal` so it can update it when `qty` changes.
+
+Most frameworks solve this with markers — data attributes, special IDs, or comment nodes scattered throughout the HTML. My approach was different: since the compiler knows the exact DOM structure at build time, it can generate *direct paths*:
+
+```tsx
+// The component renders:
+<div>
+  <h1>Shop</h1>
+  <span>{count} items</span>
+  <button onClick={() => count++}>+</button>
+</div>
+
+// The compiler knows the structure:
+// root.children[0] = h1 (static, ignore)
+// root.children[1] = span
+// root.children[1].childNodes[0] = TextNode ← this is reactive
+// root.children[2] = button ← needs event handler
+
+// Generated hydration code:
+function hydrate(root) {
+  const countText = root.children[1].childNodes[0];
+  const button = root.children[2];
+
+  __effect(() => { countText.data = String(__count.get()); });
+  button.addEventListener('click', () => __count.set(__count.get() + 1));
+}
+```
+
+No markers. No `querySelector`. No `data-*` attributes. The compiler generates a precise address for every reactive node.
+
+Beautiful, right? Now install Grammarly.
+
+Grammarly (and password managers, and ad blockers, and browser extensions) inject DOM nodes into the page. Your carefully calculated `children[1].childNodes[0]` now points to a Grammarly `<span>` instead of your text node. Silently. In production. On your users' browsers.
+
+And then there's browser HTML normalization. Try this:
+
+```html
+<table>
+  <tr><td>Data</td></tr>
+</table>
+```
+
+The browser automatically inserts a `<tbody>` that doesn't exist in your source HTML:
+
+```html
+<table>
+  <tbody>        <!-- 👋 hi, I'm new here -->
+    <tr><td>Data</td></tr>
+  </tbody>
+</table>
+```
+
+Your tree walking path `table.children[0]` expected `<tr>`. It got `<tbody>`. Every path below is broken.
+
+I wrote in my specification: "The compiler knows HTML rules and generates tree walking that accounts for normalization." One sentence. For a problem that the Marko Framework (built by eBay) spent *years* making production-ready. One sentence for years of work. That's the gap between designing a framework and building one.
+
+For dynamic content, I added comment markers as a fallback:
+
+```html
+<p>
+  Hello, <!--t-->Alex<!--/t-->! You have
+  <!--t-->5<!--/t--> items.
+</p>
+```
+
+So much for "no markers, clean HTML." By the end of the hydration section, I had four types of markers (`<!--t-->`, `<!--if-->`, `<!--list-->`, `<mats-island>`), a browser normalization compatibility layer, and the dawning realization that I'd described something much harder than I thought.
+
+## Destructuring: the elegant trap
+
+One of my proudest design moments was making destructuring reactive:
+
+```tsx
+let user = signal({ name: 'Alex', age: 25 });
+
+const { name, age } = user;
+// Compiler output:
+// const name = __derived(() => __user.get().name)
+// const age = __derived(() => __user.get().age)
+
+// Works with props too:
+function UserCard({ user }) {
+  const { name, age } = user;
+  // Same transformation — reactive destructuring
+}
+```
+
+Nested destructuring, aliases, defaults, array destructuring, rest patterns — all reactive. I was thorough. I documented every case.
+
+Then someone (okay, me at 3 AM) asked: "What about props spread?"
+
+```tsx
+function Wrapper(props) {
+  return <Inner {...props} />;
+}
+```
+
+In JavaScript, `{...props}` calls all getters and creates a plain object. If `props` has getter-based reactive properties (which is how my framework passes props), spreading them creates a static snapshot. Reactivity is gone.
+
+This isn't an edge case. It's one of the most common React patterns. Wrapper components, higher-order components, compound components, design systems — they all use spread. The workaround? "List every prop explicitly." But a generic wrapper doesn't know which props it'll receive.
+
+Solid.js solved this with `splitProps()` and `mergeProps()`. I put "mergeProps utility" in "Post-MVP features." Translation: I didn't have a solution and was hoping future-me would figure it out. (Future-me did figure it out: don't build the framework.)
+
+## The reactive model nobody can explain
+
+I designed the batching system with three properties:
+
+1. **Signal writes mark dependents as dirty** (push-based notification)
+2. **Derived values recompute lazily on read** (pull-based evaluation)
+3. **DOM updates flush through `queueMicrotask`** (batched scheduling)
+
+This gives you glitch-free updates:
+
+```tsx
+let a = signal(1);
+let b = signal(2);
+const sum = a + b; // derived
+
+function handler() {
+  a = 10; // marks sum as dirty
+  b = 20; // marks sum as dirty
+  // → after handler: sum recalculates ONCE → DOM updates ONCE
+  // → intermediate state (a=10, b=2, sum=12) never reaches the DOM
+}
+```
+
+Sounds great. But when I tried to write a precise specification of the execution model, I kept contradicting myself.
+
+"Flush processes dirty nodes in topological order" — but if derived values are lazy (recompute on read, not on write), what exactly does "flush" do? Does it *push* updates through the graph, or does it trigger *reads* that *pull* updates? Is this push-based or pull-based?
+
+The answer is "hybrid, like the TC39 Signals proposal." But describing a hybrid reactive model precisely requires formal semantics — mathematical rules that define behavior in every case. I had examples. I didn't have rules.
+
+Specification-by-example always has gaps. I could show you 20 cases that work correctly. Case 21 would be undefined behavior, and neither of us would know until runtime.
+
+## The 3.2 KB runtime that wasn't
+
+In my specification, I had a beautiful table:
+
+| Module | Size |
+|--------|------|
+| Navigation | ~400 bytes |
+| DOM morphing | ~2 KB |
+| Island loader | ~400 bytes |
+| Server function proxy | ~300 bytes |
+| Event bus | ~100 bytes |
+| **Total** | **~3.2 KB** |
+
+I was so proud of that number. Then I started tallying what was missing:
+
+- **Signals + derived + effects runtime:** ~800 bytes (per island, not shared)
+- **Watch with cleanup:** ~1 KB
+- **`.mut()` (Immer-like mutations):** ~2 KB
+- **Keyed list reconciliation:** ~1.5 KB
+- **devalue deserialization:** ~1 KB
+- **Error boundaries and cleanup:** ~300 bytes
+
+Realistic total for a page with one interactive island: **8-10 KB**. Still smaller than React (35 KB+). But not "3.2 KB." I'd been marketing to myself.
+
+Every framework author does this, by the way. Preact claimed 3 KB and grew to 4 KB. It's not dishonesty — it's optimism meeting reality. But when you're writing a specification, optimism is a liability.
+
+## The specification reaches 55 KB
+
+By this point, my specification had grown to 1,500 lines. Every decision was documented. Every alternative was considered. Every edge case I could think of was addressed.
+
+I knew *exactly* how the compiler should handle closures, async/await, re-exports, barrel files, conditional dependencies, dynamic imports, browser normalization, Grammarly-injected nodes, circular module dependencies, `<tbody>` auto-insertion, and fourteen other things that would make this paragraph even longer.
+
+I could explain the Transfer vs. Expression distinction to anyone. I could draw the reactive dependency graph for any component. I could tell you why early return isn't reactive and why `{...props}` breaks getter-based reactivity and why `const` in my framework doesn't mean what `const` means in JavaScript.
+
+I had a comprehensive, detailed, internally consistent specification for a framework that would genuinely improve web development.
+
+What I didn't have was a single line of implementation code.
+
+And I was starting to count the months.
+
+## The weight of knowing
+
+There's a peculiar kind of clarity that comes from deep specification work. You understand the problem space so well that you can see both the solution *and* its impossibility simultaneously.
+
+I could see that the compiler transform would require handling every JavaScript scope pattern — closures, async continuations, generator yields, class methods, proxy traps. That Svelte's team of 5+ engineers spent two years on this, with the advantage of controlling a custom `.svelte` file format. That I was proposing to do the same thing in arbitrary `.tsx` files, alone, as a side project.
+
+I could see that cross-module analysis was fundamentally incompatible with Vite's per-file transform pipeline. That the two-pass approach required either abandoning Vite or building a fragile caching layer that would be the source of mysterious bugs for years.
+
+I could see that "3.2 KB runtime" was an estimate made by someone who hadn't written the code yet — and that the real number would be 3x larger, which is still impressive, but not the number in the pitch.
+
+Each of these was a red flag. Together, they formed a pattern.
+
+The specification wasn't wrong. The vision wasn't wrong. But the distance between "a beautiful specification" and "a framework someone can `npm install`" is measured not in pages, but in person-years.
+
+And I had a day job.
+
+## What's next
+
+In the final part of this series, I'll tell you why I walked away. Not because the ideas were bad — they weren't. Not because I lost interest — I didn't. But because I learned something about the difference between understanding a problem and solving it.
+
+I'll also share the specific lessons that made me a better engineer, even though I never shipped a single line of framework code.
+
+**[Part 3: Why I Stopped Building My JavaScript Framework →](/blog/why-i-stopped-building-my-javascript-framework)**
+
+---
+
+*The best code you'll ever write might be the code you decide not to ship. The specification is still in my repo. Sometimes I open it and think, "yeah, this would've been amazing." Then I close it and open a React component. Life goes on.*

@@ -1,67 +1,70 @@
 ---
-import { Image } from 'astro:assets';
-import { getCollection } from 'astro:content';
-import BaseHead from '../../../components/BaseHead.astro';
-import Footer from '../../../components/Footer.astro';
+import Breadcrumbs from '../../../components/Breadcrumbs.astro';
 import FormattedDate from '../../../components/FormattedDate.astro';
-import Header from '../../../components/Header.astro';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { SITE_TITLE } from '../../../consts';
+import { getPublishedPosts } from '../../../utils/posts';
+import { getReadingTime } from '../../../utils/reading-time';
 
 export async function getStaticPaths() {
-	const posts = await getCollection('blog', ({ data }) => !data.draft);
-	const tags = [...new Set(posts.flatMap((post) => post.data.tags))];
-	return tags.map((tag) => ({
-		params: { tag },
-		props: {
-			tag,
-			posts: posts
-				.filter((post) => post.data.tags.includes(tag))
-				.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()),
-		},
-	}));
+  const posts = await getPublishedPosts();
+  const tags = [...new Set(posts.flatMap((post) => post.data.tags))];
+  return tags.map((tag) => ({
+    params: { tag },
+    props: {
+      tag,
+      posts: posts.filter((post) => post.data.tags.includes(tag)),
+    },
+  }));
 }
 
 const { tag, posts } = Astro.props;
 ---
 
-<!doctype html>
-<html lang="en">
-	<head>
-		<BaseHead title={`${tag} | ${SITE_TITLE}`} description={`Posts tagged with "${tag}".`} />
-	</head>
-	<body class="bg-white text-[var(--color-text)]">
-		<Header />
-		<main class="max-w-5xl mx-auto px-4 py-12">
-			<a href="/blog" class="text-sm text-[var(--color-text-muted)] hover:text-[var(--color-accent)] mb-4 inline-block">
-				&larr; All posts
-			</a>
-			<h1 class="text-4xl font-bold mb-10">Tag: {tag}</h1>
+<BaseLayout
+  title={`${tag} — ${SITE_TITLE}`}
+  description={`Articles tagged "${tag}".`}
+>
+  <div class="max-w-5xl mx-auto w-full px-6 py-14">
+    <Breadcrumbs
+      items={[
+        { label: 'Home', href: '/' },
+        { label: 'Blog', href: '/blog' },
+      ]}
+      current={`#${tag}`}
+    />
 
-			<div class="grid md:grid-cols-2 gap-8">
-				{posts.map((post) => (
-					<a href={`/blog/${post.id}/`} class="group block no-underline">
-						{post.data.heroImage && (
-							<Image
-								width={720}
-								height={360}
-								src={post.data.heroImage}
-								alt={post.data.title}
-								class="w-full rounded-xl mb-4 group-hover:shadow-lg transition-shadow"
-							/>
-						)}
-						<p class="text-sm text-[var(--color-text-muted)] mb-1">
-							<FormattedDate date={post.data.pubDate} />
-						</p>
-						<h2 class="text-xl font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
-							{post.data.title}
-						</h2>
-						<p class="text-[var(--color-text-muted)] mt-2 text-sm line-clamp-2">
-							{post.data.description}
-						</p>
-					</a>
-				))}
-			</div>
-		</main>
-		<Footer />
-	</body>
-</html>
+    <header class="mb-10">
+      <h1 class="font-display text-3xl font-800 tracking-tight">
+        <span class="text-green">#</span>{tag}
+      </h1>
+      <p class="text-ink-muted text-sm mt-1">
+        {posts.length} article{posts.length !== 1 && 's'}
+      </p>
+    </header>
+
+    <div>
+      {
+        posts.map((post) => (
+          <a
+            href={`/blog/${post.id}/`}
+            class="post-row group flex items-baseline gap-4 py-3.5 border-b border-line/50 no-underline"
+          >
+            <time
+              datetime={post.data.pubDate.toISOString()}
+              class="text-[11px] font-mono text-ink-faint shrink-0 w-20 tabular-nums hidden sm:block"
+            >
+              <FormattedDate date={post.data.pubDate} />
+            </time>
+            <span class="flex-1 min-w-0 font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
+              {post.data.title}
+            </span>
+            <span class="text-[10px] font-mono text-ink-faint shrink-0 hidden sm:block">
+              {getReadingTime(post.body ?? '')} min
+            </span>
+          </a>
+        ))
+      }
+    </div>
+  </div>
+</BaseLayout>

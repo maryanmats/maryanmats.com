@@ -1,76 +1,98 @@
 ---
-import { Image } from 'astro:assets';
-import { getCollection } from 'astro:content';
-import BaseHead from '../../components/BaseHead.astro';
-import Footer from '../../components/Footer.astro';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import EmptyState from '../../components/EmptyState.astro';
 import FormattedDate from '../../components/FormattedDate.astro';
-import Header from '../../components/Header.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
 import { SITE_TITLE } from '../../consts';
+import { getPublishedPosts } from '../../utils/posts';
+import { getReadingTime } from '../../utils/reading-time';
 
-const posts = (await getCollection('blog', ({ data }) => !data.draft))
-	.sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+const posts = await getPublishedPosts();
 
-const allTags = [...new Set(posts.flatMap((post) => post.data.tags))].sort();
+const allTags = [...new Set(posts.flatMap((p) => p.data.tags))].sort();
+
+const grouped = posts.reduce<Record<number, typeof posts>>((acc, post) => {
+  const year = post.data.pubDate.getFullYear();
+  (acc[year] ??= []).push(post);
+  return acc;
+}, {});
+const years = Object.keys(grouped)
+  .map(Number)
+  .sort((a, b) => b - a);
 ---
 
-<!doctype html>
-<html lang="en">
-	<head>
-		<BaseHead title={`Blog | ${SITE_TITLE}`} description="All blog posts." />
-	</head>
-	<body class="bg-white text-[var(--color-text)]">
-		<Header />
-		<main class="max-w-5xl mx-auto px-4 py-12">
-			<h1 class="text-4xl font-bold mb-4">Blog</h1>
+<BaseLayout
+  title={`Blog — ${SITE_TITLE}`}
+  description="Articles about TypeScript, React, and the modern web."
+>
+  <div class="max-w-5xl mx-auto w-full px-6 py-14">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="Blog" />
 
-			{allTags.length > 0 && (
-				<div class="flex flex-wrap gap-2 mb-10">
-					{allTags.map((tag) => (
-						<a
-							href={`/blog/tag/${tag}/`}
-							class="px-3 py-1 text-sm rounded-full bg-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-accent)] hover:text-white transition-colors no-underline"
-						>
-							{tag}
-						</a>
-					))}
-				</div>
-			)}
+    <header class="mb-10 animate-fade-up">
+      <h1 class="font-display text-4xl font-800 tracking-tight mb-2">Blog</h1>
+      <p class="text-ink-muted text-sm">
+        Articles about TypeScript, React, and the modern web.
+      </p>
+    </header>
 
-			<div class="grid md:grid-cols-2 gap-8">
-				{posts.map((post) => (
-					<a href={`/blog/${post.id}/`} class="group block no-underline">
-						{post.data.heroImage && (
-							<Image
-								width={720}
-								height={360}
-								src={post.data.heroImage}
-								alt={post.data.title}
-								class="w-full rounded-xl mb-4 group-hover:shadow-lg transition-shadow"
-								transition:name={`hero-${post.data.title}`}
-							/>
-						)}
-						<p class="text-sm text-[var(--color-text-muted)] mb-1">
-							<FormattedDate date={post.data.pubDate} />
-						</p>
-						<h2 class="text-xl font-semibold text-[var(--color-text)] group-hover:text-[var(--color-accent)] transition-colors">
-							{post.data.title}
-						</h2>
-						<p class="text-[var(--color-text-muted)] mt-2 text-sm line-clamp-2">
-							{post.data.description}
-						</p>
-						{post.data.tags.length > 0 && (
-							<div class="flex flex-wrap gap-1 mt-3">
-								{post.data.tags.map((tag) => (
-									<span class="px-2 py-0.5 text-xs rounded-full bg-[var(--color-border)] text-[var(--color-text-muted)]">
-										{tag}
-									</span>
-								))}
-							</div>
-						)}
-					</a>
-				))}
-			</div>
-		</main>
-		<Footer />
-	</body>
-</html>
+    {
+      allTags.length > 0 && (
+        <div class="flex flex-wrap gap-2 mb-10">
+          <a
+            href="/blog"
+            class="px-2.5 py-1 text-[11px] font-mono rounded-md bg-green text-page no-underline"
+          >
+            All
+          </a>
+          {allTags.map((tag) => (
+            <a
+              href={`/blog/tag/${tag}/`}
+              class="px-2.5 py-1 text-[11px] font-mono rounded-md bg-tag-bg text-ink-faint no-underline border border-transparent hover:border-green hover:text-green transition-colors duration-200"
+            >
+              {tag}
+            </a>
+          ))}
+        </div>
+      )
+    }
+
+    {
+      posts.length === 0 ? (
+        <EmptyState />
+      ) : (
+        years.map((year) => (
+          <section class="mb-10">
+            <h2 class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.15em] mb-4 flex items-center gap-3">
+              <span>{year}</span>
+              <span class="flex-1 h-px bg-line" />
+            </h2>
+            <div>
+              {grouped[year].map((post) => (
+                <a
+                  href={`/blog/${post.id}/`}
+                  class="post-row group flex items-baseline gap-4 py-3.5 border-b border-line/50 no-underline"
+                >
+                  <time
+                    datetime={post.data.pubDate.toISOString()}
+                    class="text-[11px] font-mono text-ink-faint shrink-0 w-14 tabular-nums"
+                  >
+                    {post.data.pubDate.toLocaleDateString('en-us', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </time>
+                  <span class="flex-1 min-w-0 font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
+                    {post.data.title}
+                  </span>
+                  <span class="text-[10px] font-mono text-ink-faint shrink-0 hidden sm:block">
+                    {getReadingTime(post.body ?? '')} min
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+        ))
+      )
+    }
+  </div>
+</BaseLayout>

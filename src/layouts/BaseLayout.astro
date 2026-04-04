@@ -1,0 +1,54 @@
+---
+import BaseHead from '../components/BaseHead.astro';
+import Footer from '../components/Footer.astro';
+import Header from '../components/Header.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+  article?: {
+    publishedTime?: string;
+    modifiedTime?: string;
+    tags?: string[];
+  };
+  withReadingProgress?: boolean;
+}
+
+const { title, description, ogImage, article, withReadingProgress = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={title} description={description} ogImage={ogImage} article={article} />
+  </head>
+  <body class="bg-page text-ink min-h-screen flex flex-col">
+    {withReadingProgress && <div id="reading-progress"></div>}
+    <a href="#main-content" class="skip-link sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[999] focus:px-4 focus:py-2 focus:rounded-lg focus:bg-green focus:text-page focus:text-sm focus:font-mono focus:no-underline">
+      Skip to content
+    </a>
+    <Header />
+    <main id="main-content" class="flex-1">
+      <slot />
+    </main>
+    <Footer />
+
+    {withReadingProgress && (
+      <script>
+        function initProgress() {
+          const bar = document.getElementById('reading-progress');
+          function update() {
+            if (!bar) return;
+            const h = document.documentElement.scrollHeight - window.innerHeight;
+            bar.style.width = h > 0 ? `${(window.scrollY / h) * 100}%` : '0%';
+          }
+          window.addEventListener('scroll', update, { passive: true });
+          update();
+        }
+        initProgress();
+        document.addEventListener('astro:after-swap', initProgress);
+      </script>
+    )}
+  </body>
+</html>

@@ -1,30 +1,104 @@
 ---
-import BaseHead from '../components/BaseHead.astro';
-import Footer from '../components/Footer.astro';
-import Header from '../components/Header.astro';
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import ContactLinks from '../components/ContactLinks.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE_TITLE } from '../consts';
 ---
 
-<!doctype html>
-<html lang="en">
-	<head>
-		<BaseHead title={`About | ${SITE_TITLE}`} description="About me and this blog." />
-	</head>
-	<body class="bg-white text-[var(--color-text)]">
-		<Header />
-		<main class="max-w-3xl mx-auto px-4 py-12">
-			<h1 class="text-4xl font-bold mb-8">About</h1>
-			<div class="prose max-w-none">
-				<p>
-					Hey! I'm a frontend developer working with React, Next.js, TypeScript, and modern web technologies.
-					This blog is where I share what I learn, build, and think about.
-				</p>
-				<p>
-					Topics include React patterns, TypeScript tips, performance optimization, CSS techniques,
-					and everything else from the frontend world.
-				</p>
-			</div>
-		</main>
-		<Footer />
-	</body>
-</html>
+<BaseLayout
+  title={`About — ${SITE_TITLE}`}
+  description="Software Engineer. TypeScript, React, Web."
+>
+  <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="About" />
+
+    <!-- Bento grid -->
+    <div class="grid md:grid-cols-[1.4fr_1fr] gap-3 md:gap-4">
+      <!-- Main -->
+      <div
+        class="rounded-2xl border border-line bg-panel p-8 md:p-10 flex flex-col justify-between min-h-[280px]"
+      >
+        <div>
+          <p
+            class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
+          >
+            About
+          </p>
+          <h1
+            class="font-display text-4xl md:text-5xl font-800 tracking-tight leading-[1.05] mb-5"
+          >
+            Maryan Mats<span class="text-green">.</span>
+          </h1>
+          <p class="text-ink-muted leading-[1.8] max-w-md">
+            Software Engineer who turns ideas into interfaces. I work with
+            TypeScript, React, and the modern web stack — and I care about every
+            detail, from types to transitions.
+          </p>
+        </div>
+        <p class="text-[11px] font-mono text-ink-faint mt-6">
+          Ukraine · Remote
+        </p>
+      </div>
+
+      <!-- Stack -->
+      <div
+        class="rounded-2xl border border-line bg-panel p-8 flex flex-col justify-between min-h-[280px]"
+      >
+        <p
+          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
+        >
+          Stack
+        </p>
+        <div class="flex-1 flex flex-col justify-center">
+          <div class="space-y-1.5 font-mono text-[13px]">
+            {
+              [
+                'TypeScript',
+                'React',
+                'Next.js',
+                'Astro',
+                'Tailwind CSS',
+                'Zustand',
+                'Node.js',
+              ].map((t) => (
+                <div class="flex items-center gap-2.5 text-ink-muted hover:text-green transition-colors duration-200 cursor-default">
+                  <span class="w-1 h-1 rounded-full bg-green/50" />
+                  <span>{t}</span>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+
+      <!-- Connect -->
+      <div class="rounded-2xl border border-line bg-panel p-8">
+        <p
+          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
+        >
+          Connect
+        </p>
+        <ContactLinks />
+      </div>
+
+      <!-- Now -->
+      <div
+        class="rounded-2xl border border-line bg-green/[0.04] p-8 flex flex-col justify-between"
+      >
+        <p
+          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-4"
+        >
+          Now
+        </p>
+        <div class="flex-1 flex items-center">
+          <p
+            class="font-display text-lg md:text-xl font-600 leading-snug tracking-tight text-ink"
+          >
+            Building products, writing articles, and trying to make the web a
+            little better every&nbsp;day<span class="text-green">.</span>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</BaseLayout>
