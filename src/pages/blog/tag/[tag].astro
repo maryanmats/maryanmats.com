@@ -1,10 +1,9 @@
 ---
 import Breadcrumbs from '../../../components/Breadcrumbs.astro';
-import FormattedDate from '../../../components/FormattedDate.astro';
+import PostRow from '../../../components/PostRow.astro';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
 import { SITE_TITLE } from '../../../consts';
 import { getPublishedPosts } from '../../../utils/posts';
-import { getReadingTime } from '../../../utils/reading-time';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
@@ -46,23 +45,13 @@ const { tag, posts } = Astro.props;
     <div>
       {
         posts.map((post) => (
-          <a
-            href={`/blog/${post.id}/`}
-            class="post-row group flex items-baseline gap-4 py-3.5 border-b border-line/50 no-underline"
-          >
-            <time
-              datetime={post.data.pubDate.toISOString()}
-              class="text-[11px] font-mono text-ink-faint shrink-0 w-20 tabular-nums hidden sm:block"
-            >
-              <FormattedDate date={post.data.pubDate} />
-            </time>
-            <span class="flex-1 min-w-0 font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
-              {post.data.title}
-            </span>
-            <span class="text-[10px] font-mono text-ink-faint shrink-0 hidden sm:block">
-              {getReadingTime(post.body ?? '')} min
-            </span>
-          </a>
+          <PostRow
+            id={post.id}
+            title={post.data.title}
+            pubDate={post.data.pubDate}
+            body={post.body}
+            series={post.data.series}
+          />
         ))
       }
     </div>

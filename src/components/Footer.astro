@@ -1,32 +1,8 @@
 ---
 import Icon from './Icon.astro';
+import { NAV_LINKS, SOCIAL_LINKS, SITE_AUTHOR, SITE_EMAIL } from '../consts';
 
 const year = new Date().getFullYear();
-
-const nav = [
-  { href: '/', label: 'Home' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/projects', label: 'Projects' },
-  { href: '/about', label: 'About' },
-];
-
-const social = [
-  {
-    href: 'https://github.com/maryanmats',
-    label: 'GitHub',
-    icon: 'github' as const,
-  },
-  {
-    href: 'https://linkedin.com/in/maryan-mats',
-    label: 'LinkedIn',
-    icon: 'linkedin' as const,
-  },
-  {
-    href: 'https://t.me/maryanmats',
-    label: 'Telegram',
-    icon: 'telegram' as const,
-  },
-];
 ---
 
 <footer class="mt-20 border-t border-line">
@@ -41,7 +17,7 @@ const social = [
         </p>
         <ul class="space-y-1.5">
           {
-            nav.map((link) => (
+            NAV_LINKS.map((link) => (
               <li>
                 <a
                   href={link.href}
@@ -64,12 +40,12 @@ const social = [
         </p>
         <ul class="space-y-1.5">
           {
-            social.map((link) => (
+            SOCIAL_LINKS.map((link) => (
               <li>
                 <a
                   href={link.href}
                   target="_blank"
-                  rel="noopener"
+                  rel="noopener noreferrer"
                   class="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-green no-underline transition-colors"
                 >
                   <Icon name={link.icon} class="w-3.5 h-3.5" />
@@ -80,7 +56,7 @@ const social = [
           }
           <li>
             <a
-              href="mailto:matsmaryan@gmail.com"
+              href={`mailto:${SITE_EMAIL}`}
               class="inline-flex items-center gap-2 text-xs text-ink-muted hover:text-green no-underline transition-colors"
             >
               <Icon name="mail" class="w-3.5 h-3.5" />
@@ -122,12 +98,12 @@ const social = [
     <div
       class="pt-6 border-t border-line/50 flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] font-mono text-ink-faint"
     >
-      <p>&copy; {year} Maryan Mats. All rights reserved.</p>
+      <p>&copy; {year} {SITE_AUTHOR}. All rights reserved.</p>
       <p>
         Built with <a
           href="https://astro.build"
           target="_blank"
-          rel="noopener"
+          rel="noopener noreferrer"
           class="text-ink-muted hover:text-green no-underline transition-colors"
           >Astro</a
         >

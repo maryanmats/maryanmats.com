@@ -1,0 +1,61 @@
+---
+import FormattedDate from './FormattedDate.astro';
+import { getReadingTime } from '../utils/reading-time';
+
+interface Props {
+  id: string;
+  title: string;
+  pubDate: Date;
+  body?: string | null;
+  series?: { part: number; total: number } | null;
+  dateFormat?: 'full' | 'short';
+  style?: string;
+}
+
+const {
+  id,
+  title,
+  pubDate,
+  body,
+  series,
+  dateFormat = 'full',
+  style,
+} = Astro.props;
+---
+
+<a
+  href={`/blog/${id}/`}
+  class="post-row group flex items-baseline gap-4 py-3.5 border-b border-line/50 no-underline"
+  style={style}
+>
+  <time
+    datetime={pubDate.toISOString()}
+    class="text-[11px] font-mono text-ink-faint shrink-0 tabular-nums hidden sm:block"
+    class:list={[dateFormat === 'full' ? 'w-20' : 'w-14']}
+  >
+    {
+      dateFormat === 'full' ? (
+        <FormattedDate date={pubDate} />
+      ) : (
+        pubDate.toLocaleDateString('en-us', { month: 'short', day: 'numeric' })
+      )
+    }
+  </time>
+  <span class="flex-1 min-w-0">
+    <span
+      class="font-display font-600 text-ink group-hover:text-green transition-colors duration-200"
+    >
+      {title}
+    </span>
+    {
+      series && (
+        <span class="ml-2 inline-block px-1.5 py-0.5 text-[9px] font-mono text-green bg-green-subtle rounded align-middle">
+          {series.part}/{series.total}
+        </span>
+      )
+    }
+  </span>
+  <span class="text-[10px] font-mono text-ink-faint shrink-0 hidden sm:block">
+    {getReadingTime(body ?? '')} min
+  </span>
+</a>

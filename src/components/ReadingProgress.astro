@@ -5,18 +5,34 @@
 <div id="reading-progress"></div>
 
 <script>
+  let cleanup: (() => void) | null = null;
+
   function initProgress() {
+    cleanup?.();
+
     const bar = document.getElementById('reading-progress');
-    function update() {
-      if (!bar) {
-        return;
-      }
-      const h = document.documentElement.scrollHeight - window.innerHeight;
-      bar.style.width = h > 0 ? `${(window.scrollY / h) * 100}%` : '0%';
+    if (!bar) {
+      return;
     }
-    window.addEventListener('scroll', update, { passive: true });
-    update();
+
+    let ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const h = document.documentElement.scrollHeight - window.innerHeight;
+          bar!.style.width = h > 0 ? `${(window.scrollY / h) * 100}%` : '0%';
+          ticking = false;
+        });
+        ticking = true;
+      }
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    cleanup = () => window.removeEventListener('scroll', onScroll);
   }
+
   initProgress();
   document.addEventListener('astro:after-swap', initProgress);
 </script>

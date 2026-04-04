@@ -1,0 +1,9 @@
+{
+  "title": "Personal Blog",
+  "description": "Personal blog built from scratch with Astro, Tailwind CSS 4, and Canvas API. Features a 3D wireframe character, dark/light themes, editorial typography, and perfect Lighthouse scores.",
+  "tech": ["Astro", "TypeScript", "Tailwind CSS", "Canvas API"],
+  "href": "https://github.com/maryanmats/maryanmats.com",
+  "status": "Live",
+  "year": "2026",
+  "order": 2
+}

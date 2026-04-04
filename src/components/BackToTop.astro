@@ -11,6 +11,7 @@
          transition-all duration-300 cursor-pointer
          opacity-0 translate-y-4 pointer-events-none"
   aria-label="Back to top"
+  aria-hidden="true"
 >
   <svg
     width="16"
@@ -28,30 +29,46 @@
 </button>
 
 <script>
+  let cleanup: (() => void) | null = null;
+
   function initBackToTop() {
+    cleanup?.();
+
     const btn = document.getElementById('back-to-top');
     if (!btn) {
       return;
     }
 
-    const el = btn;
-
-    function toggle() {
-      const show = window.scrollY > 400;
-      el.classList.toggle('opacity-0', !show);
-      el.classList.toggle('translate-y-4', !show);
-      el.classList.toggle('pointer-events-none', !show);
-      el.classList.toggle('opacity-100', show);
-      el.classList.toggle('translate-y-0', show);
-      el.classList.toggle('pointer-events-auto', show);
+    let ticking = false;
+    function onScroll() {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const show = window.scrollY > 400;
+          btn!.classList.toggle('opacity-0', !show);
+          btn!.classList.toggle('translate-y-4', !show);
+          btn!.classList.toggle('pointer-events-none', !show);
+          btn!.classList.toggle('opacity-100', show);
+          btn!.classList.toggle('translate-y-0', show);
+          btn!.classList.toggle('pointer-events-auto', show);
+          btn!.setAttribute('aria-hidden', String(!show));
+          ticking = false;
+        });
+        ticking = true;
+      }
     }
 
-    el.addEventListener('click', () => {
+    function onClick() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
+    }
 
-    window.addEventListener('scroll', toggle, { passive: true });
-    toggle();
+    btn.addEventListener('click', onClick);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
+    cleanup = () => {
+      btn!.removeEventListener('click', onClick);
+      window.removeEventListener('scroll', onScroll);
+    };
   }
 
   initBackToTop();

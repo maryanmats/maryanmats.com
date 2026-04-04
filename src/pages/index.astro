@@ -1,16 +1,18 @@
 ---
+import { getCollection } from 'astro:content';
 import ContactLinks from '../components/ContactLinks.astro';
 import EmptyState from '../components/EmptyState.astro';
 import Icon from '../components/Icon.astro';
-import FormattedDate from '../components/FormattedDate.astro';
+import PostRow from '../components/PostRow.astro';
 import WireframeCanvas from '../components/WireframeCanvas.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE_DESCRIPTION, SITE_TITLE } from '../consts';
-import { projects } from '../data/projects';
+import { SITE_DESCRIPTION, SITE_TITLE, TECH_STACK } from '../consts';
 import { getPublishedPosts } from '../utils/posts';
-import { getReadingTime } from '../utils/reading-time';
 
 const posts = (await getPublishedPosts()).slice(0, 5);
+const projects = (await getCollection('projects')).sort(
+  (a, b) => a.data.order - b.data.order,
+);
 ---
 
 <BaseLayout title={SITE_TITLE} description={SITE_DESCRIPTION}>
@@ -47,7 +49,7 @@ const posts = (await getPublishedPosts()).slice(0, 5);
           </p>
           <div class="flex flex-wrap gap-2">
             {
-              ['TypeScript', 'React', 'Next.js', 'Astro'].map((t) => (
+              TECH_STACK.slice(0, 4).map((t) => (
                 <span class="px-2.5 py-0.5 text-[11px] font-mono rounded-md border border-line text-ink-faint">
                   {t}
                 </span>
@@ -92,31 +94,15 @@ const posts = (await getPublishedPosts()).slice(0, 5);
     {
       posts.length > 0 ? (
         <div class="stagger">
-          {posts.map((post) => (
-            <a
-              href={`/blog/${post.id}/`}
-              class="post-row group flex items-baseline gap-4 py-4 border-b border-line/60 no-underline"
-            >
-              <time
-                datetime={post.data.pubDate.toISOString()}
-                class="text-[11px] font-mono text-ink-faint shrink-0 w-20 tabular-nums hidden sm:block"
-              >
-                <FormattedDate date={post.data.pubDate} />
-              </time>
-              <span class="flex-1 min-w-0">
-                <span class="font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
-                  {post.data.title}
-                </span>
-                {post.data.series && (
-                  <span class="ml-2 inline-block px-1.5 py-0.5 text-[9px] font-mono text-green bg-green-subtle rounded align-middle">
-                    {post.data.series.part}/{post.data.series.total}
-                  </span>
-                )}
-              </span>
-              <span class="text-[11px] font-mono text-ink-faint shrink-0 hidden md:block">
-                {getReadingTime(post.body ?? '')} min
-              </span>
-            </a>
+          {posts.map((post, i) => (
+            <PostRow
+              id={post.id}
+              title={post.data.title}
+              pubDate={post.data.pubDate}
+              body={post.body}
+              series={post.data.series}
+              style={`--stagger-i: ${i}`}
+            />
           ))}
         </div>
       ) : (
@@ -143,30 +129,30 @@ const posts = (await getPublishedPosts()).slice(0, 5);
       {
         projects.map((p) => (
           <a
-            href={p.href}
+            href={p.data.href}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="group flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 py-4 px-5 rounded-xl border border-line/60 bg-panel/50 hover:border-green/30 hover:bg-panel transition-all duration-250 no-underline"
           >
             <div class="flex items-center gap-3 sm:w-48 shrink-0">
               <div class="w-2 h-2 rounded-full bg-green/60 group-hover:bg-green transition-colors" />
               <span class="font-display font-700 text-[15px] text-ink group-hover:text-green transition-colors duration-200">
-                {p.title}
+                {p.data.title}
               </span>
             </div>
             <p class="flex-1 text-xs text-ink-faint leading-relaxed line-clamp-1">
-              {p.description}
+              {p.data.description}
             </p>
             <div class="flex items-center gap-2 shrink-0">
               <span
                 class:list={[
                   'text-[10px] font-mono px-1.5 py-0.5 rounded',
-                  p.status === 'Live'
+                  p.data.status === 'Live'
                     ? 'text-green bg-green/8'
                     : 'text-ink-faint bg-tag-bg',
                 ]}
               >
-                {p.status}
+                {p.data.status}
               </span>
               <Icon
                 name="arrow-external"
@@ -198,7 +184,7 @@ const posts = (await getPublishedPosts()).slice(0, 5);
           Powered by <a
             href="https://astro.build"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="text-ink-muted hover:text-green no-underline transition-colors"
             >Astro</a
           >
@@ -207,7 +193,7 @@ const posts = (await getPublishedPosts()).slice(0, 5);
           Hosted on <a
             href="https://pages.cloudflare.com"
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="text-ink-muted hover:text-green no-underline transition-colors"
             >Cloudflare</a
           >

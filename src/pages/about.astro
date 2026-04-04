@@ -2,7 +2,7 @@
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import ContactLinks from '../components/ContactLinks.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE_TITLE } from '../consts';
+import { SITE_TITLE, TECH_STACK } from '../consts';
 ---
 
 <BaseLayout
@@ -52,15 +52,7 @@ import { SITE_TITLE } from '../consts';
         <div class="flex-1 flex flex-col justify-center">
           <div class="space-y-1.5 font-mono text-[13px]">
             {
-              [
-                'TypeScript',
-                'React',
-                'Next.js',
-                'Astro',
-                'Tailwind CSS',
-                'Zustand',
-                'Node.js',
-              ].map((t) => (
+              TECH_STACK.map((t) => (
                 <div class="flex items-center gap-2.5 text-ink-muted hover:text-green transition-colors duration-200 cursor-default">
                   <span class="w-1 h-1 rounded-full bg-green/50" />
                   <span>{t}</span>

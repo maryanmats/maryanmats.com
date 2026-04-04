@@ -1,27 +1,14 @@
 ---
 import Icon from './Icon.astro';
+import { SOCIAL_LINKS, SITE_EMAIL } from '../consts';
 
 const links = [
-  {
-    href: 'mailto:matsmaryan@gmail.com',
-    label: 'matsmaryan@gmail.com',
-    icon: 'mail' as const,
-  },
-  {
-    href: 'https://github.com/maryanmats',
-    label: 'github.com/maryanmats',
-    icon: 'github' as const,
-  },
-  {
-    href: 'https://linkedin.com/in/maryan-mats',
-    label: 'linkedin.com/in/maryan-mats',
-    icon: 'linkedin' as const,
-  },
-  {
-    href: 'https://t.me/maryanmats',
-    label: 't.me/maryanmats',
-    icon: 'telegram' as const,
-  },
+  { href: `mailto:${SITE_EMAIL}`, label: SITE_EMAIL, icon: 'mail' as const },
+  ...SOCIAL_LINKS.map((s) => ({
+    href: s.href,
+    label: s.shortLabel,
+    icon: s.icon,
+  })),
 ];
 ---
 
@@ -32,7 +19,9 @@ const links = [
         <a
           href={link.href}
           target={link.href.startsWith('mailto') ? undefined : '_blank'}
-          rel={link.href.startsWith('mailto') ? undefined : 'noopener'}
+          rel={
+            link.href.startsWith('mailto') ? undefined : 'noopener noreferrer'
+          }
           class="group flex items-center gap-3 text-ink-muted no-underline hover:text-green transition-colors"
         >
           <Icon

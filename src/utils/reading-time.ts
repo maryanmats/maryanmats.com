@@ -12,8 +12,16 @@ export function getReadingTime(text: string): number {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     // Remove link syntax but keep link text [text](url) -> text
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    // Remove remaining markdown symbols (heading markers, bold, italic, etc.)
-    .replace(/[#*_~>`|-]/g, '')
+    // Remove heading markers at start of line
+    .replace(/^#{1,6}\s/gm, '')
+    // Remove bold/italic markers
+    .replace(/(\*{1,3}|_{1,3})(.*?)\1/g, '$2')
+    // Remove strikethrough
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove blockquote markers at start of line
+    .replace(/^>\s?/gm, '')
+    // Remove horizontal rules
+    .replace(/^[-*]{3,}$/gm, '')
     .trim();
 
   if (!cleaned) {

@@ -19,7 +19,11 @@ const { posts = [] } = Astro.props;
     class="relative cursor-pointer w-[200px] h-[290px] md:w-[300px] md:h-[440px]"
     tabindex="0"
     aria-label="Interactive 3D wireframe figure — click or press Enter to browse posts"
-    role="img"></canvas>
+    role="img"
+    data-posts={JSON.stringify(posts)}
+  >
+    <p>Interactive 3D wireframe figure showcasing latest blog posts</p>
+  </canvas>
 
   <!-- Post card -->
   <div
@@ -63,10 +67,6 @@ const { posts = [] } = Astro.props;
     {posts.length > 0 ? 'click to explore' : 'no posts yet'}
   </p>
 </div>
-
-<script define:vars={{ posts }}>
-  window.__wireframePosts = posts;
-</script>
 
 <script>
   (() => {
@@ -430,7 +430,7 @@ const { posts = [] } = Astro.props;
       private currentIndex = 0;
       private hideTimer = 0;
 
-      constructor() {
+      constructor(canvas: HTMLCanvasElement) {
         this.el = document.getElementById('wireframe-card')!;
         this.titleLink = document.getElementById(
           'wireframe-card-title',
@@ -441,8 +441,11 @@ const { posts = [] } = Astro.props;
         ) as HTMLAnchorElement;
         this.label = document.getElementById('wireframe-card-label')!;
         this.dotsContainer = document.getElementById('wireframe-card-dots')!;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        this.posts = (window as any).__wireframePosts || [];
+        try {
+          this.posts = JSON.parse(canvas.dataset.posts || '[]');
+        } catch {
+          this.posts = [];
+        }
 
         this.dotsContainer.innerHTML = '';
         for (let i = 0; i < this.posts.length; i++) {
@@ -581,7 +584,7 @@ const { posts = [] } = Astro.props;
         }));
 
         this.hint = document.getElementById('wireframe-hint');
-        this.card = new CardUI();
+        this.card = new CardUI(canvas);
 
         canvas.addEventListener('click', this.handleClick);
         canvas.addEventListener('keydown', this.handleKeydown);

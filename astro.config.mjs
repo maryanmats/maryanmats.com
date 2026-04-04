@@ -9,6 +9,7 @@ import tailwindcss from '@tailwindcss/vite';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://maryanmats.com',
+  prefetch: true,
   integrations: [mdx(), sitemap()],
 
   markdown: {

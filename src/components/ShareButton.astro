@@ -34,16 +34,20 @@ const url = Astro.url.href;
 </button>
 
 <script>
+  let cleanup: (() => void) | null = null;
+
   function initShare() {
+    cleanup?.();
+
     const btn = document.getElementById('share-btn');
     const label = document.getElementById('share-label');
     if (!btn || !label) {
       return;
     }
 
-    btn.addEventListener('click', async () => {
-      const url = btn.dataset.url!;
-      const title = btn.dataset.title!;
+    async function handleClick() {
+      const url = btn!.dataset.url!;
+      const title = btn!.dataset.title!;
 
       if (navigator.share) {
         try {
@@ -53,12 +57,15 @@ const url = Astro.url.href;
         }
       } else {
         await navigator.clipboard.writeText(url);
-        label.textContent = 'Copied!';
+        label!.textContent = 'Copied!';
         setTimeout(() => {
-          label.textContent = 'Share';
+          label!.textContent = 'Share';
         }, 2000);
       }
-    });
+    }
+
+    btn.addEventListener('click', handleClick);
+    cleanup = () => btn!.removeEventListener('click', handleClick);
   }
 
   initShare();

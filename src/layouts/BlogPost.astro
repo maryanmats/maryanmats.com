@@ -7,24 +7,8 @@ import PostNavigation from '../components/PostNavigation.astro';
 import ShareButton from '../components/ShareButton.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import { SITE_AUTHOR } from '../consts';
+import type { Heading, NavPost, SeriesPost } from '../types';
 import BaseLayout from './BaseLayout.astro';
-
-interface Heading {
-  depth: number;
-  slug: string;
-  text: string;
-}
-
-interface NavPost {
-  id: string;
-  title: string;
-}
-
-interface SeriesPost {
-  id: string;
-  title: string;
-  part: number;
-}
 
 type Props = CollectionEntry<'blog'>['data'] & {
   readingTime?: number;

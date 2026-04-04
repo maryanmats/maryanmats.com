@@ -1,0 +1,16 @@
+{
+  "title": "WeSendit",
+  "description": "Secure Swiss file transfer and decentralized Web3 storage platform. The world's first gateway to decentralized storage networks — serving 3.6M+ active users across 180+ countries. Features encrypted file transfer, Web3 storage integration via Storj, and token-based reward system.",
+  "tech": [
+    "React",
+    "TypeScript",
+    "Web3",
+    "Blockchain",
+    "Node.js",
+    "Cloudflare"
+  ],
+  "href": "https://www.wesendit.com",
+  "status": "Live",
+  "year": "2024",
+  "order": 1
+}

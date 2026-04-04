@@ -117,25 +117,52 @@
 </style>
 
 <script>
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let pagefind: any = null;
+  interface PagefindResultData {
+    url: string;
+    excerpt: string;
+    meta?: { title?: string };
+  }
 
-  async function loadPagefind() {
+  interface PagefindResult {
+    data(): Promise<PagefindResultData>;
+  }
+
+  interface PagefindSearch {
+    results: PagefindResult[];
+  }
+
+  interface PagefindInstance {
+    init(): Promise<void>;
+    search(query: string): Promise<PagefindSearch>;
+  }
+
+  let pagefind: PagefindInstance | null = null;
+
+  async function loadPagefind(): Promise<PagefindInstance | null> {
     if (pagefind) {
       return pagefind;
     }
     try {
-      // Dynamic import hidden from Vite bundler
       const path = '/pagefind/pagefind.js';
       pagefind = await import(/* @vite-ignore */ path);
-      await pagefind.init();
+      await pagefind!.init();
     } catch {
       pagefind = null;
     }
     return pagefind;
   }
 
+  function escapeHtml(str: string): string {
+    const el = document.createElement('span');
+    el.textContent = str;
+    return el.innerHTML;
+  }
+
+  let cleanup: (() => void) | null = null;
+
   function initSearch() {
+    cleanup?.();
+
     const trigger = document.getElementById('search-trigger');
     const modal = document.getElementById('search-modal');
     const backdrop = document.getElementById('search-backdrop');
@@ -150,24 +177,34 @@
     const m = modal;
     const inp = input;
     const res = results;
+    const placeholder =
+      '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+
+    let previousFocus: HTMLElement | null = null;
 
     function open() {
+      previousFocus = document.activeElement as HTMLElement | null;
       m.classList.remove('hidden');
       inp.value = '';
-      res.innerHTML =
-        '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+      res.innerHTML = placeholder;
       requestAnimationFrame(() => inp.focus());
       loadPagefind();
     }
 
     function close() {
       m.classList.add('hidden');
+      previousFocus?.focus();
     }
 
-    trigger.addEventListener('click', open);
-    backdrop.addEventListener('click', close);
+    function handleTriggerClick() {
+      open();
+    }
 
-    document.addEventListener('keydown', (e) => {
+    function handleBackdropClick() {
+      close();
+    }
+
+    function handleKeydown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         if (m.classList.contains('hidden')) {
@@ -175,20 +212,41 @@
         } else {
           close();
         }
+        return;
+      }
+      if (m.classList.contains('hidden')) {
+        return;
       }
       if (e.key === 'Escape') {
         close();
+        return;
       }
-    });
+      if (e.key === 'Tab') {
+        const focusable = m.querySelectorAll<HTMLElement>(
+          'input, a[href], button:not([disabled])',
+        );
+        if (focusable.length === 0) {
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
 
     let debounce: ReturnType<typeof setTimeout>;
-    inp.addEventListener('input', () => {
+    function handleInput() {
       clearTimeout(debounce);
       debounce = setTimeout(async () => {
         const query = inp.value.trim();
         if (!query) {
-          res.innerHTML =
-            '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+          res.innerHTML = placeholder;
           return;
         }
 
@@ -206,22 +264,33 @@
           return;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const items = await Promise.all(
-          search.results.slice(0, 8).map((r: any) => r.data()),
+          search.results.slice(0, 8).map((r) => r.data()),
         );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         res.innerHTML = items
           .map(
-            (item: any) =>
-              `<a href="${item.url}">
-            <div class="search-title">${item.meta?.title ?? item.url}</div>
+            (item) =>
+              `<a href="${escapeHtml(item.url)}">
+            <div class="search-title">${escapeHtml(item.meta?.title ?? item.url)}</div>
             <div class="search-excerpt">${item.excerpt}</div>
           </a>`,
           )
           .join('');
       }, 200);
-    });
+    }
+
+    trigger.addEventListener('click', handleTriggerClick);
+    backdrop.addEventListener('click', handleBackdropClick);
+    document.addEventListener('keydown', handleKeydown);
+    inp.addEventListener('input', handleInput);
+
+    cleanup = () => {
+      trigger.removeEventListener('click', handleTriggerClick);
+      backdrop.removeEventListener('click', handleBackdropClick);
+      document.removeEventListener('keydown', handleKeydown);
+      inp.removeEventListener('input', handleInput);
+      clearTimeout(debounce);
+    };
   }
 
   initSearch();

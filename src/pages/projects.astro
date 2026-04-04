@@ -1,9 +1,13 @@
 ---
+import { getCollection } from 'astro:content';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import Icon from '../components/Icon.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE_TITLE } from '../consts';
-import { projects } from '../data/projects';
+
+const projects = (await getCollection('projects')).sort(
+  (a, b) => a.data.order - b.data.order,
+);
 ---
 
 <BaseLayout title={`Projects — ${SITE_TITLE}`} description="Things I've built.">
@@ -25,9 +29,9 @@ import { projects } from '../data/projects';
       {
         projects.map((project, i) => (
           <a
-            href={project.href}
+            href={project.data.href}
             target="_blank"
-            rel="noopener"
+            rel="noopener noreferrer"
             class="project-row group block rounded-2xl border border-line bg-panel p-6 md:p-8 hover:border-green/30 transition-all duration-300 no-underline animate-fade-up"
             style={`animation-delay: ${80 + i * 60}ms;`}
           >
@@ -38,31 +42,31 @@ import { projects } from '../data/projects';
                 </div>
                 <div>
                   <h2 class="font-display text-lg font-700 text-ink group-hover:text-green transition-colors duration-200 leading-tight">
-                    {project.title}
+                    {project.data.title}
                   </h2>
                   <div class="flex items-center gap-2 mt-1">
                     <span
                       class:list={[
                         'px-2 py-0.5 text-[10px] font-mono rounded-full border',
-                        project.status === 'Live'
+                        project.data.status === 'Live'
                           ? 'border-green/30 text-green bg-green/5'
                           : 'border-line text-ink-faint bg-tag-bg',
                       ]}
                     >
-                      {project.status}
+                      {project.data.status}
                     </span>
                     <span class="text-[10px] font-mono text-ink-faint">
-                      {project.year}
+                      {project.data.year}
                     </span>
                   </div>
                 </div>
               </div>
               <div class="flex-1 min-w-0">
                 <p class="text-sm text-ink-muted leading-relaxed mb-4">
-                  {project.description}
+                  {project.data.description}
                 </p>
                 <div class="flex flex-wrap gap-1.5">
-                  {project.tech.map((t) => (
+                  {project.data.tech.map((t) => (
                     <span class="px-2.5 py-0.5 text-[10px] font-mono rounded-md bg-tag-bg text-ink-faint border border-line/50">
                       {t}
                     </span>

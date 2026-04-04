@@ -2,17 +2,11 @@
 import Icon from './Icon.astro';
 import Search from './Search.astro';
 import ThemeToggle from './ThemeToggle.astro';
+import { NAV_LINKS } from '../consts';
 
 const pathname = Astro.url.pathname.replace(import.meta.env.BASE_URL, '');
 const subpath = pathname.match(/[^/]+/g);
 const current = '/' + (subpath?.[0] || '');
-
-const links = [
-  { href: '/', label: 'Home' },
-  { href: '/blog', label: 'Blog' },
-  { href: '/projects', label: 'Projects' },
-  { href: '/about', label: 'About' },
-];
 ---
 
 <header class="header-root sticky top-0 z-50">
@@ -42,7 +36,7 @@ const links = [
     <!-- Desktop nav -->
     <div class="hidden sm:flex items-center gap-1">
       {
-        links.map((link) => {
+        NAV_LINKS.map((link) => {
           const isActive = link.href === current || link.href === pathname;
           return (
             <a
@@ -124,7 +118,7 @@ const links = [
   >
     <div class="max-w-5xl mx-auto px-6 py-4 space-y-1">
       {
-        links.map((link) => {
+        NAV_LINKS.map((link) => {
           const isActive = link.href === current || link.href === pathname;
           return (
             <a
@@ -176,7 +170,11 @@ const links = [
 </style>
 
 <script>
+  let cleanup: (() => void) | null = null;
+
   function initMobileMenu() {
+    cleanup?.();
+
     const btn = document.getElementById('mobile-menu-btn');
     const menuEl = document.getElementById('mobile-menu');
     if (!btn || !menuEl) {
@@ -185,28 +183,30 @@ const links = [
 
     const hamburgerIcon = btn.querySelector('.hamburger-icon');
     const closeIcon = btn.querySelector('.close-icon');
-    const b = btn;
-    const m = menuEl;
 
     function toggle() {
-      const isOpen = !m.classList.contains('hidden');
-      m.classList.toggle('hidden');
+      const isOpen = !menuEl!.classList.contains('hidden');
+      menuEl!.classList.toggle('hidden');
       hamburgerIcon?.classList.toggle('hidden');
       closeIcon?.classList.toggle('hidden');
-      b.setAttribute('aria-expanded', String(!isOpen));
+      btn!.setAttribute('aria-expanded', String(!isOpen));
     }
 
     function closeMenu() {
-      m.classList.add('hidden');
+      menuEl!.classList.add('hidden');
       hamburgerIcon?.classList.remove('hidden');
       closeIcon?.classList.add('hidden');
-      b.setAttribute('aria-expanded', 'false');
+      btn!.setAttribute('aria-expanded', 'false');
     }
 
-    b.addEventListener('click', toggle);
-    m.querySelectorAll('a').forEach((a) =>
-      a.addEventListener('click', closeMenu),
-    );
+    btn.addEventListener('click', toggle);
+    const links = menuEl.querySelectorAll('a');
+    links.forEach((a) => a.addEventListener('click', closeMenu));
+
+    cleanup = () => {
+      btn!.removeEventListener('click', toggle);
+      links.forEach((a) => a.removeEventListener('click', closeMenu));
+    };
   }
 
   initMobileMenu();

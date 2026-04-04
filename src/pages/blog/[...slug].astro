@@ -1,44 +1,50 @@
 ---
 import { type CollectionEntry, render } from 'astro:content';
 import BlogPost from '../../layouts/BlogPost.astro';
+import type { NavPost, SeriesPost } from '../../types';
 import { getPublishedPosts } from '../../utils/posts';
 import { getReadingTime } from '../../utils/reading-time';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
-  return posts.map((post, i) => ({
-    params: { slug: post.id },
-    props: {
-      post,
-      prev: posts[i + 1]
-        ? { id: posts[i + 1].id, title: posts[i + 1].data.title }
-        : undefined,
-      next: posts[i - 1]
-        ? { id: posts[i - 1].id, title: posts[i - 1].data.title }
-        : undefined,
-    },
-  }));
+  return posts.map((post, i) => {
+    const seriesPosts = post.data.series
+      ? posts
+          .filter((p) => p.data.series?.name === post.data.series!.name)
+          .map((p) => ({
+            id: p.id,
+            title: p.data.title,
+            part: p.data.series!.part,
+          }))
+          .sort((a, b) => a.part - b.part)
+      : [];
+
+    return {
+      params: { slug: post.id },
+      props: {
+        post,
+        prev: posts[i + 1]
+          ? { id: posts[i + 1].id, title: posts[i + 1].data.title }
+          : undefined,
+        next: posts[i - 1]
+          ? { id: posts[i - 1].id, title: posts[i - 1].data.title }
+          : undefined,
+        seriesPosts,
+      },
+    };
+  });
 }
 
 interface Props {
   post: CollectionEntry<'blog'>;
-  prev?: { id: string; title: string };
-  next?: { id: string; title: string };
+  prev?: NavPost;
+  next?: NavPost;
+  seriesPosts: SeriesPost[];
 }
 
-const { post, prev, next } = Astro.props;
+const { post, prev, next, seriesPosts } = Astro.props;
 const { Content, headings } = await render(post);
 const readingTime = getReadingTime(post.body ?? '');
-
-// Find sibling posts in the same series
-let seriesPosts: { id: string; title: string; part: number }[] = [];
-if (post.data.series) {
-  const allPosts = await getPublishedPosts();
-  seriesPosts = allPosts
-    .filter((p) => p.data.series?.name === post.data.series!.name)
-    .map((p) => ({ id: p.id, title: p.data.title, part: p.data.series!.part }))
-    .sort((a, b) => a.part - b.part);
-}
 ---
 
 <BlogPost

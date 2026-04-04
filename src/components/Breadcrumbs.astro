@@ -15,12 +15,19 @@ const site = Astro.site?.toString().replace(/\/$/, '') ?? '';
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
-  itemListElement: items.map((item, i) => ({
-    '@type': 'ListItem',
-    position: i + 1,
-    name: item.label,
-    item: `${site}${item.href}`,
-  })),
+  itemListElement: [
+    ...items.map((item, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: item.label,
+      item: `${site}${item.href}`,
+    })),
+    {
+      '@type': 'ListItem',
+      position: items.length + 1,
+      name: current,
+    },
+  ],
 };
 ---
 
