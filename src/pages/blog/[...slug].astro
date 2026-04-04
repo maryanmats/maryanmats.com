@@ -10,8 +10,12 @@ export async function getStaticPaths() {
     params: { slug: post.id },
     props: {
       post,
-      prev: posts[i + 1] ? { id: posts[i + 1].id, title: posts[i + 1].data.title } : undefined,
-      next: posts[i - 1] ? { id: posts[i - 1].id, title: posts[i - 1].data.title } : undefined,
+      prev: posts[i + 1]
+        ? { id: posts[i + 1].id, title: posts[i + 1].data.title }
+        : undefined,
+      next: posts[i - 1]
+        ? { id: posts[i - 1].id, title: posts[i - 1].data.title }
+        : undefined,
     },
   }));
 }
@@ -31,12 +35,19 @@ let seriesPosts: { id: string; title: string; part: number }[] = [];
 if (post.data.series) {
   const allPosts = await getPublishedPosts();
   seriesPosts = allPosts
-    .filter(p => p.data.series?.name === post.data.series!.name)
-    .map(p => ({ id: p.id, title: p.data.title, part: p.data.series!.part }))
+    .filter((p) => p.data.series?.name === post.data.series!.name)
+    .map((p) => ({ id: p.id, title: p.data.title, part: p.data.series!.part }))
     .sort((a, b) => a.part - b.part);
 }
 ---
 
-<BlogPost {...post.data} readingTime={readingTime} headings={headings} prev={prev} next={next} seriesPosts={seriesPosts}>
+<BlogPost
+  {...post.data}
+  readingTime={readingTime}
+  headings={headings}
+  prev={prev}
+  next={next}
+  seriesPosts={seriesPosts}
+>
   <Content />
 </BlogPost>
