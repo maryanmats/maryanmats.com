@@ -1,8 +1,8 @@
 ---
-title: "You Don't Need Zustand: Build a Type-Safe React Store in 30 Lines"
-description: "Zustand, Redux Toolkit, and Jotai all use the same hidden React hook under the hood. Here's how useSyncExternalStore works, why it exists, and how to build your own state manager that's tiny, type-safe, and tear-free."
+title: "You Don't Need Zustand: useSyncExternalStore Is All You Need"
+description: "Build a type-safe React store in 30 lines using useSyncExternalStore — the hidden hook behind Zustand, Redux, and Jotai."
 pubDate: 2026-04-06T10:00:00
-tags: ["react", "typescript", "javascript", "web-development"]
+tags: ["react", "typescript", "javascript", "web-development", "state-management", "hooks"]
 draft: false
 ---
 
@@ -27,7 +27,7 @@ That hook is `useSyncExternalStore`. And once you understand it, you can build y
 
 More importantly, you'll understand *why* it exists, what problem it solves, and why every serious state library in the React ecosystem uses it under the hood.
 
-## The bug that most React developers don't know exists
+## The useState + useEffect bug in React state management
 
 Let me show you a pattern that's in thousands of React codebases right now. It looks correct. It passes code review. It works in development. And it has a subtle, devastating bug.
 
@@ -75,7 +75,7 @@ The React team spent years trying to solve this. They first built `useMutableSou
 
 The replacement is `useSyncExternalStore`. The trade-off is in the name: **sync**. When an external store changes, React renders synchronously (no time-slicing). You lose concurrent rendering for store updates, but you get a guarantee: **every component in the tree sees the same snapshot. No tearing. Ever.**
 
-## The API — three arguments, zero magic
+## How useSyncExternalStore works — three arguments, zero magic
 
 ```ts
 const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?);
@@ -91,7 +91,7 @@ That's it. No providers. No context. No reducers. No middleware. Three functions
 
 React calls `getSnapshot` synchronously during render. If the store changes during a concurrent render, React detects the mismatch (by calling `getSnapshot` again before committing) and restarts the render synchronously. This is the anti-tearing mechanism.
 
-## Let's build something real
+## Building a type-safe React store from scratch
 
 Enough theory. Let's build a store that's:
 - Type-safe (full TypeScript inference)
@@ -171,7 +171,7 @@ function Header() {
 
 The `Header` component subscribes to `s.name`. When `count` changes, `getSnapshot` returns `"My Counter"` — the same string reference. `Object.is("My Counter", "My Counter")` is `true`. React skips the re-render. No `React.memo`, no `useMemo`, no selector memoization libraries. Just `Object.is`.
 
-## The gotchas that'll bite you at 2 AM
+## Common useSyncExternalStore pitfalls and how to fix them
 
 I wouldn't be honest if I didn't show you where this goes wrong.
 
@@ -237,7 +237,7 @@ const isOnline = useSyncExternalStore(
 );
 ```
 
-## Real-world recipes you'll actually use
+## Real-world useSyncExternalStore examples
 
 ### Recipe 1: Online status
 
@@ -309,7 +309,7 @@ export function useLocalStorage<T>(key: string, initial: T) {
 
 Now open two tabs. Change the value in one. Watch the other update instantly. No WebSockets. No polling. Just the platform.
 
-## The libraries you use every day? They all use this hook
+## How Zustand and Redux use useSyncExternalStore internally
 
 Let me show you where `useSyncExternalStore` lives in the wild:
 
@@ -343,7 +343,7 @@ React-Redux v7 had hundreds of lines of custom subscription logic, manual batchi
 
 The next time someone asks you "Zustand or Redux?", you can answer: "They both use the same React primitive. The question is which API you prefer on top."
 
-## When you should NOT use this
+## When NOT to use useSyncExternalStore
 
 To be fair, there are cases where `useSyncExternalStore` is the wrong tool:
 
@@ -352,7 +352,7 @@ To be fair, there are cases where `useSyncExternalStore` is the wrong tool:
 - **For one-shot reads** — if you need a value once (not a subscription), `useEffect` with a ref is simpler.
 - **For high-frequency updates** — scroll position, mouse coordinates, animation frames. At 60+ events per second, you need `requestAnimationFrame` batching or a coarse-grained `getSnapshot` (e.g., round to nearest 50px). Raw `useSyncExternalStore` will trigger 60 re-renders per second.
 
-## The mental model
+## React state: internal vs external — the mental model
 
 Here's how I think about it now:
 
@@ -365,3 +365,5 @@ The boundary between these two is the boundary between "React's world" and "ever
 ---
 
 *Zustand is still great. Redux Toolkit is still great. You should probably keep using them. But now you know what's inside — and if you ever need a tiny, custom store for a specific use case, you know exactly how to build one. In 30 lines.*
+
+*If you enjoyed this deep dive into React internals, you might like my series on [designing a web framework from scratch](/blog/designed-a-web-framework-with-two-imports) — where I explored signals, compilers, and why I ultimately abandoned the whole thing.*
