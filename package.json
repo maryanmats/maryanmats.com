@@ -8,11 +8,14 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && (pagefind --site dist/client 2>/dev/null || pagefind --site dist) && (cp -r dist/client/pagefind dist/pagefind 2>/dev/null || true)",
-    "preview": "astro preview",
-    "astro": "astro"
+    "preview": "npm run build && wrangler dev",
+    "astro": "astro",
+    "generate-types": "wrangler types",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.8",
+    "@astrojs/cloudflare": "^13.1.7",
     "@astrojs/mdx": "^5.0.3",
     "@astrojs/rss": "^4.0.18",
     "@astrojs/sitemap": "^3.7.2",
@@ -29,6 +32,10 @@
     "prettier": "^3.8.1",
     "prettier-plugin-astro": "^0.14.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.58.0"
+    "typescript-eslint": "^8.58.0",
+    "wrangler": "^4.80.0"
+  },
+  "overrides": {
+    "vite": "^7"
   }
 }
