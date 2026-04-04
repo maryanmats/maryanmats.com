@@ -131,7 +131,7 @@ const { posts = [] } = Astro.props;
       const midpointCache: Record<string, number> = {};
       const getMidpoint = (a: number, b: number) => {
         const key = Math.min(a, b) + '_' + Math.max(a, b);
-        if (midpointCache[key] != null) return midpointCache[key];
+        if (midpointCache[key] != null) {return midpointCache[key];}
         const va = vertices[a],
           vb = vertices[b];
         const mx = (va[0] + vb[0]) / 2,
@@ -191,9 +191,8 @@ const { posts = [] } = Astro.props;
         ay = dy / length,
         az = dz / length;
 
-      let ux = 0,
-        uy = 1,
-        uz = 0;
+      let ux = 0, uy = 1;
+      const uz = 0;
       if (Math.abs(ay) > 0.9) {
         ux = 1;
         uy = 0;
@@ -228,17 +227,17 @@ const { posts = [] } = Astro.props;
       }
 
       for (let i = 0; i <= rings; i++)
-        for (let s = 0; s < segments; s++)
-          edges.push([
-            offset + i * segments + s,
-            offset + i * segments + ((s + 1) % segments),
-          ]);
+        {for (let s = 0; s < segments; s++)
+        {edges.push([
+        offset + i * segments + s,
+        offset + i * segments + ((s + 1) % segments),
+      ]);}}
       for (let i = 0; i < rings; i++)
-        for (let s = 0; s < segments; s++) {
-          const j = offset + i * segments + s;
-          edges.push([j, offset + (i + 1) * segments + s]);
-          edges.push([j, offset + (i + 1) * segments + ((s + 1) % segments)]);
-        }
+        {for (let s = 0; s < segments; s++) {
+        const j = offset + i * segments + s;
+        edges.push([j, offset + (i + 1) * segments + s]);
+        edges.push([j, offset + (i + 1) * segments + ((s + 1) % segments)]);
+      }}
     }
 
     function addCap(
@@ -252,9 +251,8 @@ const { posts = [] } = Astro.props;
       capRings: number,
     ) {
       const offset = verts.length;
-      let ux = 0,
-        uy = 1,
-        uz = 0;
+      let ux = 0, uy = 1;
+      const uz = 0;
       if (Math.abs(axis[1]) > 0.9) {
         ux = 1;
         uy = 0;
@@ -293,19 +291,19 @@ const { posts = [] } = Astro.props;
       const poleIdx = verts.length - 1;
 
       for (let i = 0; i <= capRings; i++)
-        for (let s = 0; s < segments; s++)
-          edges.push([
-            offset + i * segments + s,
-            offset + i * segments + ((s + 1) % segments),
-          ]);
+        {for (let s = 0; s < segments; s++)
+        {edges.push([
+        offset + i * segments + s,
+        offset + i * segments + ((s + 1) % segments),
+      ]);}}
       for (let i = 0; i < capRings; i++)
-        for (let s = 0; s < segments; s++) {
-          const j = offset + i * segments + s;
-          edges.push([j, offset + (i + 1) * segments + s]);
-          edges.push([j, offset + (i + 1) * segments + ((s + 1) % segments)]);
-        }
+        {for (let s = 0; s < segments; s++) {
+        const j = offset + i * segments + s;
+        edges.push([j, offset + (i + 1) * segments + s]);
+        edges.push([j, offset + (i + 1) * segments + ((s + 1) % segments)]);
+      }}
       for (let s = 0; s < segments; s++)
-        edges.push([offset + capRings * segments + s, poleIdx]);
+        {edges.push([offset + capRings * segments + s, poleIdx]);}
     }
 
     function normalize(v: number[]) {
@@ -320,9 +318,9 @@ const { posts = [] } = Astro.props;
       const head = buildIcosphere(2);
       const headOffset = verts.length;
       for (const [x, y, z] of head.vertices)
-        verts.push([x * 54, y * 54 - 128, z * 54]);
+        {verts.push([x * 54, y * 54 - 128, z * 54]);}
       for (const [a, b] of head.edges)
-        edges.push([a + headOffset, b + headOffset]);
+        {edges.push([a + headOffset, b + headOffset]);}
 
       addCylinder(verts, edges, [0, -74, 0], [0, -52, 0], 17, 22, 6, 1);
       addCylinder(verts, edges, [0, -52, 0], [0, 52, 0], 46, 38, 8, 4);
@@ -430,6 +428,7 @@ const { posts = [] } = Astro.props;
         ) as HTMLAnchorElement;
         this.label = document.getElementById('wireframe-card-label')!;
         this.dotsContainer = document.getElementById('wireframe-card-dots')!;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.posts = (window as any).__wireframePosts || [];
 
         this.dotsContainer.innerHTML = '';
@@ -449,7 +448,7 @@ const { posts = [] } = Astro.props;
       }
 
       show(index: number) {
-        if (!this.posts.length) return;
+        if (!this.posts.length) {return;}
         this.currentIndex = index;
         const post = this.posts[index];
         const url = '/blog/' + post.slug + '/';
@@ -577,7 +576,7 @@ const { posts = [] } = Astro.props;
         new IntersectionObserver(
           ([entry]) => {
             this.isVisible = entry.isIntersecting;
-            if (this.isVisible && !this.rafId) this.loop();
+            if (this.isVisible && !this.rafId) {this.loop();}
           },
           { threshold: 0.1 },
         ).observe(canvas);
@@ -619,12 +618,12 @@ const { posts = [] } = Astro.props;
 
       private advanceCard() {
         this.clickCount++;
-        if (this.clickCount === 1 && this.hint) this.hint.style.opacity = '0';
-        if (this.card.hasPosts) this.card.next();
+        if (this.clickCount === 1 && this.hint) {this.hint.style.opacity = '0';}
+        if (this.card.hasPosts) {this.card.next();}
       }
 
       private draw(now: number) {
-        if (now - this.lastFrameTime < TARGET_FRAME_MS) return;
+        if (now - this.lastFrameTime < TARGET_FRAME_MS) {return;}
         this.lastFrameTime = now;
 
         const elapsed = (now - this.startTime) * 0.001;
@@ -673,7 +672,7 @@ const { posts = [] } = Astro.props;
         const depthRange = Math.max(maxDepth - minDepth, 1);
 
         const tiers = this.depthTiers;
-        for (let i = 0; i < DEPTH_TIERS; i++) tiers[i].length = 0;
+        for (let i = 0; i < DEPTH_TIERS; i++) {tiers[i].length = 0;}
         for (let i = 0; i < buf.length; i++) {
           const normalized = (buf[i].depth - minDepth) / depthRange;
           tiers[Math.min((normalized * DEPTH_TIERS) | 0, DEPTH_TIERS - 1)].push(
@@ -687,7 +686,7 @@ const { posts = [] } = Astro.props;
         ctx.lineCap = 'round';
         for (let ti = 0; ti < DEPTH_TIERS; ti++) {
           const tier = tiers[ti];
-          if (!tier.length) continue;
+          if (!tier.length) {continue;}
           const depthFactor = (ti + 0.5) / DEPTH_TIERS;
           ctx.globalAlpha = 0.04 + depthFactor * 0.72;
           ctx.lineWidth = 0.2 + depthFactor * 0.75;
@@ -745,7 +744,7 @@ const { posts = [] } = Astro.props;
       const el = document.getElementById(
         'wireframe-canvas',
       ) as HTMLCanvasElement | null;
-      if (el) instance = new WireframeRenderer(el);
+      if (el) {instance = new WireframeRenderer(el);}
     }
 
     init();

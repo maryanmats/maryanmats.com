@@ -54,13 +54,13 @@ const filtered = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
     activeObserver = null;
 
     const links = document.querySelectorAll<HTMLAnchorElement>('.toc-link');
-    if (links.length === 0) return;
+    if (links.length === 0) {return;}
 
     const headingEls = Array.from(links)
       .map((l) => document.getElementById(l.dataset.slug!))
       .filter(Boolean) as HTMLElement[];
 
-    if (headingEls.length === 0) return;
+    if (headingEls.length === 0) {return;}
 
     activeObserver = new IntersectionObserver(
       (entries) => {

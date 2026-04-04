@@ -4,7 +4,7 @@ import Search from './Search.astro';
 import ThemeToggle from './ThemeToggle.astro';
 
 const pathname = Astro.url.pathname.replace(import.meta.env.BASE_URL, '');
-const subpath = pathname.match(/[^\/]+/g);
+const subpath = pathname.match(/[^/]+/g);
 const current = '/' + (subpath?.[0] || '');
 
 const links = [
@@ -131,7 +131,7 @@ const links = [
   function initMobileMenu() {
     const btn = document.getElementById('mobile-menu-btn');
     const menuEl = document.getElementById('mobile-menu');
-    if (!btn || !menuEl) return;
+    if (!btn || !menuEl) {return;}
 
     const hamburgerIcon = btn.querySelector('.hamburger-icon');
     const closeIcon = btn.querySelector('.close-icon');

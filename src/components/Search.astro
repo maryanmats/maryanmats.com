@@ -79,10 +79,11 @@
 </style>
 
 <script>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let pagefind: any = null;
 
   async function loadPagefind() {
-    if (pagefind) return pagefind;
+    if (pagefind) {return pagefind;}
     try {
       // Dynamic import hidden from Vite bundler
       const path = '/pagefind/pagefind.js';
@@ -100,7 +101,7 @@
     const backdrop = document.getElementById('search-backdrop');
     const input = document.getElementById('search-input') as HTMLInputElement | null;
     const results = document.getElementById('search-results');
-    if (!trigger || !modal || !input || !results || !backdrop) return;
+    if (!trigger || !modal || !input || !results || !backdrop) {return;}
 
     const m = modal;
     const inp = input;
@@ -124,9 +125,13 @@
     document.addEventListener('keydown', (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        m.classList.contains('hidden') ? open() : close();
+        if (m.classList.contains('hidden')) {
+          open();
+        } else {
+          close();
+        }
       }
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') {close();}
     });
 
     let debounce: ReturnType<typeof setTimeout>;
@@ -151,8 +156,10 @@
           return;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const items = await Promise.all(search.results.slice(0, 8).map((r: any) => r.data()));
-        results.innerHTML = items.map((item: any) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        res.innerHTML = items.map((item: any) =>
           `<a href="${item.url}">
             <div class="search-title">${item.meta?.title ?? item.url}</div>
             <div class="search-excerpt">${item.excerpt}</div>

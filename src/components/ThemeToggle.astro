@@ -68,7 +68,7 @@
 
     const btn = document.getElementById('theme-toggle');
     const label = document.getElementById('theme-label');
-    if (!btn || !label) return;
+    if (!btn || !label) {return;}
 
     function update() {
       const isDark = document.documentElement.classList.contains('dark');
