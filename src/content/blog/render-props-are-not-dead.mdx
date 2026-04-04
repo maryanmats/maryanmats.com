@@ -1,0 +1,542 @@
+---
+title: "Render Props Are Not Dead — React Hooks Didn't Replace What Actually Matters"
+description: "Hooks replaced render props for logic sharing — but not for rendering control, inversion of control, or component architecture. Here's why I still use render props in 2026, with real patterns from Headless UI, Downshift, and Base UI."
+pubDate: 2026-04-08T10:00:00
+tags: ["react", "typescript", "render-props", "hooks", "component-architecture", "web-development"]
+draft: false
+---
+
+I'm going to say something that gets me looks in code reviews.
+
+I still use render props. Regularly. In new code. In 2026. Not because I'm nostalgic, and not because I missed the hooks migration. I use them because they solve problems that hooks genuinely cannot solve — and because the React community threw away a powerful architectural pattern based on a misunderstanding of what hooks actually replaced.
+
+Here's what hooks replaced: **the use of render props for sharing stateful logic between components.** That's it. That's the thing hooks made obsolete. The `<MouseTracker>` example from the old React docs, where you wrapped a component in a render prop just to get access to `x` and `y` coordinates — yes, `useMousePosition()` is obviously better for that.
+
+But render props were never *just* about sharing logic. They were about **giving the consumer control over rendering while the provider controls behavior**. That's a fundamentally different concern. And hooks don't touch it.
+
+## The thing nobody talks about: Container/Presentational separation
+
+Remember the Container/Presentational pattern? Dan Abramov wrote about it in 2015, then half-retracted it in 2019 saying hooks made it unnecessary. And technically, hooks *did* eliminate the need for class-based container components that existed solely to hold state.
+
+But the *principle* behind Container/Presentational — separating **what happens** from **what it looks like** — didn't go away. It's one of the most useful architectural boundaries you can draw in a React application. And render props are still the cleanest way to express it.
+
+```tsx
+// The container: manages behavior, knows nothing about UI
+function Combobox<T>({ items, onSelect, children }: {
+  items: T[];
+  onSelect: (item: T) => void;
+  children: (props: {
+    inputProps: React.InputHTMLAttributes<HTMLInputElement>;
+    listProps: React.HTMLAttributes<HTMLUListElement>;
+    items: T[];
+    highlightedIndex: number;
+    isOpen: boolean;
+  }) => React.ReactNode;
+}) {
+  const [query, setQuery] = useState('');
+  const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+
+  const filtered = items.filter(/* ... */);
+
+  const inputProps = {
+    value: query,
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => setQuery(e.target.value),
+    onFocus: () => setIsOpen(true),
+    onKeyDown: handleKeyDown,
+    role: 'combobox' as const,
+    'aria-expanded': isOpen,
+  };
+
+  return <>{children({ inputProps, listProps, items: filtered, highlightedIndex, isOpen })}</>;
+}
+```
+
+The `Combobox` manages keyboard navigation, filtering, ARIA attributes, open/close state. It has zero opinions about markup. Now the consumer:
+
+```tsx
+<Combobox items={users} onSelect={handleSelect}>
+  {({ inputProps, items, highlightedIndex, isOpen }) => (
+    <div className="relative">
+      <input {...inputProps} className="border rounded px-3 py-2" />
+      {isOpen && (
+        <ul className="absolute mt-1 shadow-lg rounded">
+          {items.map((user, i) => (
+            <li
+              key={user.id}
+              className={i === highlightedIndex ? 'bg-blue-100' : ''}
+            >
+              <img src={user.avatar} className="w-6 h-6 rounded-full" />
+              <span>{user.name}</span>
+              <Badge role={user.role} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )}
+</Combobox>
+```
+
+Try doing this with a hook. You'd get `useCombobox()` that returns state and handlers — fine. But the consumer still needs to wire everything together manually: the input, the list, the items, the highlight styles, the conditional rendering. The hook gives you *data*. The render prop gives you data **and** a rendering boundary — a clear place where the container ends and the presentation begins.
+
+This is why Downshift, the library that basically invented this pattern for accessible comboboxes, still ships both the hook API (`useCombobox`, `useSelect`) *and* the render prop API. Kent C. Dodds didn't keep the render prop version out of nostalgia. He kept it because for complex rendering delegation, it's the better abstraction.
+
+## The real reason render props survive: inversion of control
+
+There's a design principle that explains why render props refuse to die. It's called **inversion of control**, and it's the difference between a library that does things *for* you and a library that does things *through* you.
+
+Without inversion of control, components accumulate config props:
+
+```tsx
+<Autocomplete
+  items={items}
+  renderItem={renderItem}
+  renderEmpty={renderEmpty}
+  renderLoading={renderLoading}
+  maxVisible={10}
+  filterFn={customFilter}
+  sortFn={customSort}
+  groupBy={groupByCategory}
+  showAvatar={true}
+  avatarSize="sm"
+  highlightMatch={true}
+  // ... it never ends
+/>
+```
+
+Every new use case demands a new prop. The component becomes a configuration object with JSX syntax. I've seen components with 40+ props. They're untestable, they're rigid, and every new feature request means modifying the component internals.
+
+Render props invert this. Instead of configuring what the component does, you tell it what to *render*:
+
+```tsx
+<Autocomplete items={items}>
+  {({ inputProps, results, isOpen, highlightedIndex }) => (
+    <div>
+      <SearchInput {...inputProps} />
+      {isOpen && (
+        <ResultsList>
+          {results.length === 0 ? (
+            <EmptyState query={inputProps.value} />
+          ) : (
+            results.map((item, i) => (
+              <ResultCard
+                key={item.id}
+                item={item}
+                highlighted={i === highlightedIndex}
+              />
+            ))
+          )}
+        </ResultsList>
+      )}
+    </div>
+  )}
+</Autocomplete>
+```
+
+The `Autocomplete` component didn't need to know about `EmptyState`, `ResultCard`, `SearchInput`, avatars, grouping, or highlight matching. The consumer brought all of that. The component stayed simple — it manages filtering, keyboard navigation, and ARIA. Nothing else.
+
+This is the pattern that Headless UI, Base UI, Ark UI, and TanStack Table all use today. It's not legacy. It's the architecture of the most respected component libraries in the React ecosystem right now.
+
+## What hooks literally cannot do
+
+I'm not being provocative here. There are concrete technical limitations.
+
+### You can't call hooks conditionally
+
+This is the rules of hooks. You can't put a `useEffect` inside an `if` statement. You can't call `useState` after an early return. The React documentation is explicit about this — hooks must be called in the same order on every render.
+
+But you *can* conditionally render a component. And if that component uses hooks internally, the hooks only run when the component mounts.
+
+```tsx
+// This violates rules of hooks:
+function Page({ showAnalytics }) {
+  if (showAnalytics) {
+    usePageView('/dashboard'); // ILLEGAL — conditional hook call
+  }
+  return <Dashboard />;
+}
+
+// This is perfectly fine:
+function PageView({ path }) {
+  usePageView(path); // Always runs when mounted — no violation
+  return null;
+}
+
+function Page({ showAnalytics }) {
+  return (
+    <>
+      {showAnalytics && <PageView path="/dashboard" />}
+      <Dashboard />
+    </>
+  );
+}
+```
+
+The `PageView` component is essentially a render prop that returns nothing — a renderless component. When `showAnalytics` is false, it doesn't mount, so `usePageView` never runs. No wasted event listeners. No wasted network requests.
+
+This pattern is everywhere in real codebases. You need a scroll listener only when a certain panel is open? Wrap the hook in a component, render it conditionally. You need an intersection observer only for items that are close to the viewport? Same pattern.
+
+### You can't use hooks inside `.map()`
+
+```tsx
+// This is illegal:
+function List({ items }) {
+  return items.map(item => {
+    const [expanded, setExpanded] = useState(false); // VIOLATION
+    return <div key={item.id}>...</div>;
+  });
+}
+
+// This is fine — each component instance has its own hook state:
+function ListItem({ item }) {
+  const [expanded, setExpanded] = useState(false);
+  return <div>...</div>;
+}
+
+function List({ items }) {
+  return items.map(item => <ListItem key={item.id} item={item} />);
+}
+```
+
+You might say "just extract a component" — and yes, that's the solution. But notice: the moment you extract a component to hold per-item state, you've created a container/presentational boundary. The render prop pattern just makes that boundary explicit and reusable.
+
+### A hook returns data. It doesn't control when you render.
+
+This is the subtle one. A hook like `useTransition` from React Spring returns interpolated values. But the *library* needs to control the rendering lifecycle — it needs to call your render function for entering items, leaving items, and updating items at specific moments during the animation.
+
+```tsx
+const transitions = useTransition(items, {
+  from: { opacity: 0, y: -10 },
+  enter: { opacity: 1, y: 0 },
+  leave: { opacity: 0, y: 10 },
+});
+
+return transitions((style, item) => (
+  <animated.div style={style}>
+    {item.text}
+  </animated.div>
+));
+```
+
+That `transitions()` call is a render prop in disguise. React Spring calls your function once for each item in each animation phase — enter, leave, update. You can't replicate this with a pure hook because the hook can't control *when* your render function executes for each individual item.
+
+The same applies to `react-virtualized`, TanStack Table's `flexRender()`, and any library where the rendering order is determined by the library, not by you.
+
+## The libraries that chose render props in 2025-2026
+
+This isn't history. These are active decisions by major libraries.
+
+**Headless UI v2** (Tailwind Labs) uses children-as-a-function as its primary API. Every component — `Listbox`, `Combobox`, `Menu`, `Dialog` — exposes state through render props:
+
+```tsx
+<Listbox value={selected} onChange={setSelected}>
+  {({ open }) => (
+    <>
+      <ListboxButton>{selected.name}</ListboxButton>
+      {open && (
+        <ListboxOptions>
+          {people.map(person => (
+            <ListboxOption key={person.id} value={person}>
+              {({ focus, selected }) => (
+                <div className={focus ? 'bg-blue-100' : ''}>
+                  {selected && <CheckIcon />}
+                  {person.name}
+                </div>
+              )}
+            </ListboxOption>
+          ))}
+        </ListboxOptions>
+      )}
+    </>
+  )}
+</Listbox>
+```
+
+The `{ open }`, `{ focus, selected }` — that's state that lives inside the component. You can't access it from outside with a hook because it's scoped to the component instance. The render prop is the only API that exposes it cleanly.
+
+**Base UI v1.0** (MUI, released December 2025) explicitly chose a `render` prop over Radix's `asChild` pattern. Their reasoning: better TypeScript inference, more explicit prop merging, easier debugging. They built an entire `useRender` hook to power this system. This is a brand-new architectural decision, not a legacy holdover.
+
+**TanStack Table** uses `flexRender()` — a function that takes a column definition (which can be a function) and calls it with cell data. Every cell in every row is rendered through what is essentially a render prop.
+
+**Downshift** still ships both hooks and render props. The hooks are recommended for new code, but the render prop API isn't deprecated — because for some use cases, it's genuinely better.
+
+## Children as a function — the underrated variant
+
+There are two ways to pass a render prop: as a named prop (`render`, `renderItem`) or as `children`. The children-as-a-function pattern gets less love, partly because of an old American Express blog post calling it an antipattern. Their argument: `children` doesn't communicate intent like a named prop does.
+
+That's fair for complex cases. But for simple state exposure, children-as-a-function is cleaner than anything else:
+
+```tsx
+<Toggle initial={false}>
+  {({ on, toggle }) => (
+    <button onClick={toggle}>
+      {on ? 'Enabled' : 'Disabled'}
+    </button>
+  )}
+</Toggle>
+```
+
+Compare with the hook version:
+
+```tsx
+function ToggleButton() {
+  const { on, toggle } = useToggle(false);
+  return (
+    <button onClick={toggle}>
+      {on ? 'Enabled' : 'Disabled'}
+    </button>
+  );
+}
+```
+
+For this case, the hook is better — simpler, no nesting, direct. I'm not arguing otherwise.
+
+But here's where children-as-a-function wins: **when you need the same behavior with different UIs in the same tree.**
+
+```tsx
+<AuthGate>
+  {({ user, isAuthenticated, login, logout }) => (
+    <>
+      <Header>
+        {isAuthenticated
+          ? <UserMenu user={user} onLogout={logout} />
+          : <LoginButton onClick={login} />
+        }
+      </Header>
+      <Sidebar>
+        {isAuthenticated
+          ? <UserProfile user={user} />
+          : <GuestPrompt onLogin={login} />
+        }
+      </Sidebar>
+    </>
+  )}
+</AuthGate>
+```
+
+With a hook, you'd call `useAuth()` in the parent, then pass everything down as props. Which works — but now `Header` and `Sidebar` both receive auth props they only need for rendering decisions. The render prop version scopes the auth state to exactly where it's used.
+
+And here's the bridge that most people miss — you can create a render prop component from any hook in one line:
+
+```tsx
+const AuthGate = ({ children }) => children(useAuth());
+```
+
+That's it. Hook inside, render prop outside. Best of both worlds.
+
+## The container pattern, revisited
+
+Let me come back to the container/presentational split, because I think this is where the real architectural value lives.
+
+When hooks arrived, the narrative was: "You don't need container components anymore. Just call `useData()` in your component and you're done." And for small components, that's true. A `useUser()` hook in a `ProfileCard` component is clean and simple.
+
+But as applications grow, this "just use hooks" approach creates a specific problem: **your components become tangled mixtures of behavior and presentation.**
+
+```tsx
+function UserDashboard() {
+  const { user } = useAuth();
+  const { data: projects } = useQuery('projects', fetchProjects);
+  const { data: notifications } = useQuery('notifications', fetchNotifications);
+  const [activeTab, setActiveTab] = useState('projects');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
+
+  // 200 lines of JSX mixing layout, data, and interaction logic
+}
+```
+
+Seven hooks. Multiple data sources. UI state mixed with server state mixed with responsive behavior. This component is doing *everything*. Testing it means mocking auth, mocking two API endpoints, mocking window resize, and rendering the full UI to check any single behavior.
+
+Now with a render prop container:
+
+```tsx
+function DashboardContainer({ children }: {
+  children: (props: {
+    user: User;
+    projects: Project[];
+    notifications: Notification[];
+    activeTab: string;
+    setActiveTab: (tab: string) => void;
+    sidebarOpen: boolean;
+    toggleSidebar: () => void;
+  }) => React.ReactNode;
+}) {
+  const { user } = useAuth();
+  const { data: projects = [] } = useQuery('projects', fetchProjects);
+  const { data: notifications = [] } = useQuery('notifications', fetchNotifications);
+  const [activeTab, setActiveTab] = useState('projects');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const isMobile = useMediaQuery('(max-width: 768px)');
+
+  useEffect(() => {
+    if (isMobile) setSidebarOpen(false);
+  }, [isMobile]);
+
+  return (
+    <>
+      {children({
+        user,
+        projects,
+        notifications,
+        activeTab,
+        setActiveTab,
+        sidebarOpen,
+        toggleSidebar: () => setSidebarOpen(prev => !prev),
+      })}
+    </>
+  );
+}
+```
+
+The same hooks live in the container. But now the presentation is a pure function of props — no hooks, no effects, no state management. Just JSX:
+
+```tsx
+<DashboardContainer>
+  {({ user, projects, notifications, activeTab, setActiveTab, sidebarOpen, toggleSidebar }) => (
+    <div className="flex h-screen">
+      {sidebarOpen && <Sidebar user={user} notifications={notifications} />}
+      <main className="flex-1">
+        <TopBar onToggleSidebar={toggleSidebar} user={user} />
+        <TabBar active={activeTab} onChange={setActiveTab} />
+        {activeTab === 'projects' && <ProjectGrid projects={projects} />}
+        {activeTab === 'notifications' && <NotificationList items={notifications} />}
+      </main>
+    </div>
+  )}
+</DashboardContainer>
+```
+
+The presentation function is trivially testable — pass in mock data, check the output. The container is testable independently — does it fetch the right data, does it respond to mobile breakpoints. The boundary between them is explicit, enforced by the render prop signature.
+
+You *can* achieve this separation with a custom hook. But the hook doesn't enforce the boundary — nothing stops the next developer from adding `useState` to the "presentational" component. The render prop makes the architecture visible in the code structure itself.
+
+## Real downsides — the honest ones
+
+I promised honest downsides, and "it looks weird" doesn't count. Here are the real ones.
+
+### The nesting problem is real
+
+If you compose multiple render props, you get this:
+
+```tsx
+<AuthProvider>
+  {(auth) => (
+    <ThemeProvider>
+      {(theme) => (
+        <FeatureFlags>
+          {(flags) => (
+            <LocaleProvider>
+              {(locale) => (
+                <App auth={auth} theme={theme} flags={flags} locale={locale} />
+              )}
+            </LocaleProvider>
+          )}
+        </FeatureFlags>
+      )}
+    </ThemeProvider>
+  )}
+</AuthProvider>
+```
+
+Four levels of nesting for four providers. With hooks, this is just:
+
+```tsx
+function App() {
+  const auth = useAuth();
+  const theme = useTheme();
+  const flags = useFeatureFlags();
+  const locale = useLocale();
+  // ...
+}
+```
+
+There's no arguing that the hook version is more readable here. If you need to compose more than two render props, hooks win on ergonomics. For providers and context, hooks are simply the better tool.
+
+### DevTools get noisy
+
+Every render prop component adds a layer to the React DevTools component tree. If you have deeply nested render props, the tree becomes harder to navigate. Anonymous functions show as `<Unknown>` unless you name them.
+
+```tsx
+// Shows as <Unknown> in DevTools
+<Toggle>{({ on }) => <span>{on}</span>}</Toggle>
+
+// Shows as <ToggleView> in DevTools
+<Toggle>{function ToggleView({ on }) { return <span>{on}</span>; }}</Toggle>
+```
+
+It's solvable, but it's friction that hooks don't have.
+
+### TypeScript generics get awkward
+
+Typing a generic render prop requires the `<T extends unknown>` workaround because the TSX parser confuses `<T>` with a JSX tag:
+
+```tsx
+// Syntax error — looks like a JSX tag
+const List = <T>(props: ListProps<T>) => { ... }
+
+// Works — the constraint disambiguates
+const List = <T extends unknown>(props: ListProps<T>) => { ... }
+```
+
+And typing `children` as a function requires a custom interface — `ReactNode` doesn't include functions:
+
+```tsx
+interface Props<T> {
+  items: T[];
+  children: (item: T) => React.ReactNode; // ReactNode alone won't work
+}
+```
+
+It's not hard once you know the patterns. But it's a stumbling block for developers who haven't encountered it before.
+
+### Inline functions and memoization
+
+An inline render function creates a new reference every render, which breaks `React.memo`:
+
+```tsx
+// New function reference every render — defeats memo
+<DataList renderItem={(item) => <Card item={item} />} />
+```
+
+The fix is `useCallback` or extracting the function. And in 2026, the React Compiler handles this automatically — it memoizes inline functions as part of its optimization pass. So this downside is shrinking. But if you're not on the React Compiler yet, it's worth knowing.
+
+## When I reach for render props vs hooks
+
+| Scenario | I use | Why |
+|---|---|---|
+| Sharing stateful logic between components | Custom hook | That's literally what hooks are for |
+| Context/provider values | Hook (`useContext`) | Flat, composable, no nesting |
+| Giving consumers control over rendering | Render prop | Inversion of control — hook can't do this |
+| Container/Presentational separation | Render prop | Makes the architecture boundary visible |
+| Conditional hook execution | Renderless component | Rules of hooks escape hatch |
+| Per-item state in lists | Extracted component | Each instance gets its own hooks |
+| Headless UI building | Both | Hook for logic, render prop for UI delegation |
+| Animation lifecycle rendering | Render prop/callback | Library controls when your render runs |
+
+The pattern I keep coming back to: **hooks for logic, render props for rendering control.** They're complementary, not competing.
+
+## The one-liner bridge
+
+If this article convinced you that render props have value but you don't want to rewrite your hooks, here's the bridge:
+
+```tsx
+// Turn any hook into a render prop component
+const Toggle = ({ children, ...props }) => children(useToggle(props));
+const Auth = ({ children }) => children(useAuth());
+const MediaQuery = ({ query, children }) => children(useMediaQuery(query));
+```
+
+One line each. Hook manages state. Component exposes it via children. You can use the hook directly when you want, and the render prop version when you need inversion of control or conditional rendering.
+
+This is how modern libraries work. Downshift has `useCombobox` *and* `<Downshift>`. They're not alternatives — they're the same logic with different interfaces for different use cases.
+
+---
+
+*I know render props aren't coming back as the default. Hooks won that war, and for good reason — they're simpler for 80% of use cases. But that other 20%? The cases where you need rendering control, explicit architecture boundaries, or inversion of control? Render props are still the cleanest tool I've found. And every time a new headless UI library ships with a children-as-a-function API, I feel a little vindicated.*
+
+*If you want another example of looking past the conventional wisdom, check out [why I stopped using TypeScript enums](/blog/why-i-stopped-using-enums-in-typescript) — sometimes the "obvious" tool isn't the right one.*

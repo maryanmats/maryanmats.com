@@ -1,0 +1,377 @@
+---
+title: "Why I Stopped Using Enums in TypeScript (I Use `as const` Instead)"
+description: "TypeScript enums compile into surprising JavaScript — IIFEs, reverse mappings, and tree-shaking problems. Here's why I switched to as const objects and union types, with real code examples and migration patterns."
+pubDate: 2026-04-07T10:00:00
+tags: ["typescript", "javascript", "web-development", "enums", "as-const", "best-practices"]
+draft: false
+---
+
+I used to put enums everywhere.
+
+New project? First thing I'd write — before components, before API types, before anything — was a file called `enums.ts`. Status codes, user roles, theme variants, HTTP methods, toast types. If it had more than two possible values, it was an enum.
+
+It felt *right*. Coming from languages where enums are first-class citizens (Rust, C#, Java), TypeScript enums seemed like the obvious tool. Clean syntax. Named constants. Auto-complete in VS Code. What's not to love?
+
+Then one afternoon I opened the compiled JavaScript output of a project I was shipping to production. And I stared at it for a while.
+
+## What TypeScript enums compile to (and why it matters)
+
+Here's an innocent enum:
+
+```ts
+enum Status {
+  Idle,
+  Loading,
+  Success,
+  Error,
+}
+```
+
+Four values. Clean. Readable. Now here's what TypeScript emits:
+
+```js
+var Status;
+(function (Status) {
+  Status[Status["Idle"] = 0] = "Idle";
+  Status[Status["Loading"] = 1] = "Loading";
+  Status[Status["Success"] = 2] = "Success";
+  Status[Status["Error"] = 3] = "Error";
+})(Status || (Status = {}));
+```
+
+An IIFE. A self-invoking function that mutates an object with *double assignments*. For four strings.
+
+If you've never seen this pattern before, let me unpack what `Status[Status["Idle"] = 0] = "Idle"` actually does. The inner assignment `Status["Idle"] = 0` sets `Status.Idle` to `0` and returns `0`. Then the outer assignment uses that `0` as a key: `Status[0] = "Idle"`. So now `Status.Idle === 0` *and* `Status[0] === "Idle"`.
+
+This is called **reverse mapping**. TypeScript generates it by default for numeric enums. It means your compiled object is twice the size you'd expect, and it contains entries you almost certainly never asked for.
+
+```js
+console.log(Status.Idle);    // 0
+console.log(Status[0]);      // "Idle"
+console.log(Status["Idle"]); // 0
+```
+
+I've been writing TypeScript for years and I had never once needed `Status[0]`. Not once. But every numeric enum I ever shipped included reverse mappings, silently doubling the runtime footprint.
+
+## The numeric enum footgun
+
+Reverse mapping isn't just a size issue. It's a type safety issue.
+
+Numeric enums are more permissive than most developers expect. In practice, plain numbers can flow into enum-typed parameters more easily than you'd want — especially at runtime boundaries where data comes from outside your type system.
+
+```ts
+enum Direction {
+  Up,    // 0
+  Down,  // 1
+  Left,  // 2
+  Right, // 3
+}
+
+function move(dir: Direction) {
+  // ...
+}
+
+// This is where it gets dangerous — data from outside your app
+const dirFromApi = Number(data.direction);
+move(dirFromApi as Direction); // looks safe, isn't
+```
+
+The `as Direction` cast feels reasonable — you're telling TypeScript "I know this is a Direction." But the compiler can't verify that at runtime. If the API returns `5` (a new direction the backend team added that your frontend doesn't know about yet), the cast succeeds silently and your switch statement falls through.
+
+I discovered this the hard way. A colleague passed a raw API response number into a function expecting a `Direction`. It worked in every test because the API happened to return `0`, `1`, `2`, or `3`. Then one day it returned `5`, and the switch had no matching case.
+
+No runtime error. No type error. Just wrong behavior in production. The type system gave us a false sense of completeness.
+
+To be fair, this isn't unique to enums — any unchecked `as` cast can lie to the compiler. The problem is that enums *encourage* this pattern at boundaries, because raw strings and numbers from APIs don't naturally flow into enum types without a cast. With a union type like `"up" | "down" | "left" | "right"`, the API string either matches or it doesn't — no cast required, no false confidence.
+
+## String enums are better — but still weird
+
+Okay, so numeric enums have problems. What about string enums?
+
+```ts
+enum Theme {
+  Light = "light",
+  Dark = "dark",
+  System = "system",
+}
+```
+
+The compiled output is cleaner — no reverse mapping:
+
+```js
+var Theme;
+(function (Theme) {
+  Theme["Light"] = "light";
+  Theme["Dark"] = "dark";
+  Theme["System"] = "system";
+})(Theme || (Theme = {}));
+```
+
+Better. Still an IIFE, but at least the object isn't doubled. And TypeScript correctly rejects `Theme.Light === "light"` in strict mode — wait, no it doesn't. It actually works. But it gets inconsistent:
+
+```ts
+const theme: Theme = "light"; // Error: Type '"light"' is not assignable to type 'Theme'
+```
+
+A string enum value *is* the string `"light"` at runtime, but TypeScript treats them as distinct types. String enums create a nominal-ish value space — they're not just string literal unions, they're their own branded type. So you can't assign a plain string to a string enum, even when the value is identical. This creates friction at every boundary — API responses, URL params, localStorage, JSON parsing. You end up writing `value as Theme` casts everywhere, which defeats the purpose of type safety.
+
+```ts
+// From an API response
+const data = await response.json();
+const theme = data.theme as Theme; // Trust me bro
+
+// From localStorage
+const saved = localStorage.getItem("theme") as Theme; // fingers crossed
+```
+
+Every `as Theme` is a lie you're telling the compiler. It might be true. It might not. You've just disabled the one thing that was supposed to protect you.
+
+## TypeScript enums and tree-shaking
+
+Here's one that really bothered me once I noticed it.
+
+Modern bundlers (Rollup, esbuild, Vite) eliminate unused code through tree-shaking. They analyze your imports and strip anything that isn't referenced. This works best with *static* structures — plain objects, constants, pure expressions that the bundler can reason about statically.
+
+Enums are generally less optimization-friendly than plain literals or `as const` objects, because they compile to runtime code (that IIFE) rather than disappearing into the type system. The IIFE mutates a variable, and while some bundlers and minifiers have gotten smarter about recognizing enum patterns in recent years, the optimization is never as clean or reliable as a plain `const` declaration that a bundler can trivially inline or eliminate.
+
+```ts
+import { Status } from './enums';
+
+// Only using Status.Error for a single comparison
+if (response.status === Status.Error) {
+  showToast();
+}
+```
+
+With a plain `as const` object, a bundler can see that `Status.Error` is the string `"error"` — it's a static property access on a frozen object. With an enum, the bundler has to trace through the IIFE to reach the same conclusion. Some will. Many won't bother, especially across module boundaries.
+
+With small enums this is trivial. But I've seen codebases with 50+ enums in a shared `types` package, imported across dozens of components. The cumulative effect — all those runtime objects, all that indirection — adds up in ways that plain objects and literal types simply don't.
+
+## const enum — the escape hatch that isn't
+
+TypeScript offers `const enum` as a solution to the compilation problem:
+
+```ts
+const enum Status {
+  Idle = "idle",
+  Loading = "loading",
+  Success = "success",
+  Error = "error",
+}
+
+const current = Status.Loading;
+// Compiles to:
+const current = "loading"; // inlined!
+```
+
+No IIFE. No runtime object. The values are inlined at compile time. Sounds perfect.
+
+Except:
+
+**1. It gets fragile in modern toolchains.** If your project uses single-file transpilation — Babel, SWC, esbuild, or any Vite-based pipeline — each file is compiled independently without knowledge of other modules. `const enum` needs cross-file resolution to inline values, which makes it fragile once your code crosses module or package boundaries. It works fine within a single file, but that's rarely where enums live in real projects.
+
+**2. It breaks declaration files.** If you're publishing a library, `const enum` values need to be inlined into the consumer's code. This means the consumer must use the same TypeScript version and configuration. The TypeScript team themselves [recommend against `const enum` in libraries](https://www.typescriptlang.org/docs/handbook/enums.html#const-enum-pitfalls).
+
+**3. You can't iterate over it.** Since there's no runtime object, `Object.values(Status)` doesn't work. Need a dropdown of all options? You're maintaining a separate array. That array *will* drift from the enum eventually. I've seen it happen more times than I can count.
+
+The TypeScript documentation literally has a section called "Const enum pitfalls." When the official docs dedicate a section to pitfalls, that's a signal.
+
+## TypeScript enum alternatives: what I use instead
+
+Two patterns. Both native TypeScript. Both compile to exactly what you'd expect.
+
+### Pattern 1: `as const` objects (enum replacement)
+
+```ts
+const Status = {
+  Idle: "idle",
+  Loading: "loading",
+  Success: "success",
+  Error: "error",
+} as const;
+
+type Status = (typeof Status)[keyof typeof Status];
+// type Status = "idle" | "loading" | "success" | "error"
+```
+
+The compiled output:
+
+```js
+const Status = {
+  Idle: "idle",
+  Loading: "loading",
+  Success: "success",
+  Error: "error",
+};
+```
+
+That's it. A plain object. No IIFE. No reverse mapping. Fully tree-shakeable. The type `Status` is a union of the literal values — which is what you actually wanted from the enum in the first place.
+
+You get everything enums promise and nothing they smuggle in:
+
+```ts
+function setStatus(status: Status) { /* ... */ }
+
+setStatus("idle");            // works
+setStatus("loading");         // works
+setStatus("not-a-status");    // Error: Argument of type '"not-a-status"' is not assignable
+setStatus(Status.Idle);       // also works
+
+// Iteration works
+const allStatuses = Object.values(Status); // ["idle", "loading", "success", "error"]
+
+// Type guard works
+function isStatus(value: string): value is Status {
+  return Object.values(Status).includes(value as Status);
+}
+```
+
+Notice that you can pass *either* the literal string `"idle"` *or* `Status.Idle`. Both are valid. No `as` casts needed at boundaries. When your API returns `"idle"`, it's already the correct type. When you read from localStorage, you can validate it with a simple `includes` check.
+
+### Pattern 2: Plain union types
+
+For cases where you don't need a runtime object at all — just type checking:
+
+```ts
+type Theme = "light" | "dark" | "system";
+```
+
+Compiles to: nothing. Zero bytes. The type is erased completely. If all you need is to constrain a function parameter or a prop, this is the lightest possible solution.
+
+```tsx
+interface Props {
+  theme: Theme;
+  onThemeChange: (theme: Theme) => void;
+}
+```
+
+I use union types when the set of values is small (2-4 options) and I don't need to iterate over them at runtime. For anything larger, or when I need `Object.values()` / `Object.keys()`, I use the `as const` pattern.
+
+## Migrating from enum to as const: before and after
+
+Here's a pattern I've refactored out of three different codebases now. API response handling with enums:
+
+**Before:**
+```ts
+enum ApiStatus {
+  Pending = "pending",
+  Fulfilled = "fulfilled",
+  Rejected = "rejected",
+}
+
+interface ApiState<T> {
+  status: ApiStatus;
+  data: T | null;
+  error: string | null;
+}
+
+function handleResponse<T>(state: ApiState<T>): string {
+  switch (state.status) {
+    case ApiStatus.Pending:
+      return "Loading...";
+    case ApiStatus.Fulfilled:
+      return `Got ${state.data}`;
+    case ApiStatus.Rejected:
+      return `Error: ${state.error}`;
+  }
+}
+```
+
+**After:**
+```ts
+const ApiStatus = {
+  Pending: "pending",
+  Fulfilled: "fulfilled",
+  Rejected: "rejected",
+} as const;
+
+type ApiStatus = (typeof ApiStatus)[keyof typeof ApiStatus];
+
+interface ApiState<T> {
+  status: ApiStatus;
+  data: T | null;
+  error: string | null;
+}
+
+function handleResponse<T>(state: ApiState<T>): string {
+  switch (state.status) {
+    case ApiStatus.Pending:
+      return "Loading...";
+    case ApiStatus.Fulfilled:
+      return `Got ${state.data}`;
+    case ApiStatus.Rejected:
+      return `Error: ${state.error}`;
+  }
+}
+```
+
+The usage code barely changes. The switch statement is identical. The interface is identical. The only difference is the definition — and the compiled output.
+
+But now `state.status === "pending"` works without a cast. JSON from the API is directly assignable. And your bundler can prove that `ApiStatus.Pending` is just the string `"pending"` — no IIFE indirection, no runtime overhead.
+
+## The type helper I keep in every project
+
+The `(typeof X)[keyof typeof X]` line is ugly. I'll admit that. So I use a helper:
+
+```ts
+type ValueOf<T> = T[keyof T];
+```
+
+Then:
+
+```ts
+const Status = { Idle: "idle", Loading: "loading" } as const;
+type Status = ValueOf<typeof Status>;
+// "idle" | "loading"
+```
+
+One line in a `types.ts` file. Used everywhere. If your team has a shared utility types package, it probably already exists.
+
+## When TypeScript enums are still the right choice
+
+I'd be dishonest if I pretended enums are never the right choice. Here's when I still reach for them:
+
+**Bit flags.** If you genuinely need bitwise operations — file permissions, feature flags with combinations — numeric enums with explicit powers of two are the clearest way to express that:
+
+```ts
+enum Permission {
+  Read = 1 << 0,    // 1
+  Write = 1 << 1,   // 2
+  Execute = 1 << 2, // 4
+}
+
+const userPerms = Permission.Read | Permission.Write; // 3
+```
+
+You *can* do this with `as const` objects, but the intent is less clear and you lose the visual pattern of the bitshift syntax.
+
+**Codebases that already use them consistently.** If your team has 200 enums and everyone understands the conventions, migrating to `as const` for consistency is a refactor, not an improvement. Don't refactor for ideology. Refactor when it solves a problem.
+
+**Quick prototypes.** Sometimes I'm sketching an idea at midnight and I just want auto-incrementing numbers for a state machine. `enum State { A, B, C, D }` is fine. I'll clean it up if it survives till morning.
+
+## Quick comparison: enum vs `as const` vs union type
+
+| Use case | Best choice | Why |
+|---|---|---|
+| Type safety only, no runtime values needed | Union type | Zero bytes — erased at compile time |
+| Runtime values + iteration (`Object.values`) | `as const` object | Plain JS object, fully tree-shakeable |
+| Bit flags / bitwise operations | `enum` | Clearest intent with `1 << n` syntax |
+| Data from API / localStorage / URL params | `as const` or union type | No cast needed — strings match directly |
+| Publishing a library | Avoid `const enum` | Fragile across package boundaries |
+| Existing codebase with 200 enums | Keep `enum` | Consistency beats ideology |
+
+## The deeper lesson
+
+This is a pattern I keep running into with TypeScript: the features that feel most like "real programming language features" — enums, namespaces, decorators (the old experimental ones) — are often the ones that age worst. They were designed before the ecosystem settled on ESModules, before bundlers got smart about tree-shaking, before `isolatedModules` became the default.
+
+The features that age *best* are the ones that erase completely at compile time: types, interfaces, union types, `as const`, generics, utility types. They add zero bytes to your bundle because they don't exist at runtime. They're pure type-level constructs that guide the compiler and then disappear.
+
+TypeScript is at its best when it's a *layer on top of JavaScript*, not a *language next to it*. Enums blur that line. They introduce runtime behavior that doesn't exist in JavaScript, with semantics that don't quite match any other language. Every other TypeScript feature I've mentioned — `as const`, union types, `keyof typeof` — desugars to plain JavaScript you could have written yourself.
+
+That's the property I optimize for now. Not cleverness. Not syntax sugar. **Predictable compilation.**
+
+---
+
+*I still have `enums.ts` in an old project. I open it sometimes when I'm feeling nostalgic. Forty-seven enums. Some of them have reverse mappings I'm sure nobody has ever called. They compile to about 3 KB of IIFEs that do absolutely nothing useful. I think of it as a monument to good intentions.*
+
+*If you're interested in more TypeScript war stories, check out my deep dive into [why you probably don't need Zustand](/blog/you-dont-need-zustand) — another case of looking under the hood and finding something simpler.*
