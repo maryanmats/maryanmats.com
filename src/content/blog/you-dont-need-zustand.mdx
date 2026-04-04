@@ -1,0 +1,367 @@
+---
+title: "You Don't Need Zustand: Build a Type-Safe React Store in 30 Lines"
+description: "Zustand, Redux Toolkit, and Jotai all use the same hidden React hook under the hood. Here's how useSyncExternalStore works, why it exists, and how to build your own state manager that's tiny, type-safe, and tear-free."
+pubDate: 2026-04-06T10:00:00
+tags: ["react", "typescript", "javascript", "web-development"]
+draft: false
+---
+
+I love Zustand. Let me get that out of the way. It's one of my favorite libraries in the React ecosystem — simple, fast, well-maintained.
+
+But a few months ago, I dug into Zustand's source code. Not to find bugs or contribute a PR. Just curiosity — "how does it actually work?"
+
+What I found surprised me.
+
+The core of Zustand — the thing that connects your store to React's rendering cycle — is about 5 lines of code. And those 5 lines use a built-in React hook that most developers have never heard of.
+
+```ts
+// This is essentially what Zustand does (simplified)
+const slice = React.useSyncExternalStore(
+  store.subscribe,
+  () => selector(store.getState()),
+  () => selector(store.getInitialState()),
+);
+```
+
+That hook is `useSyncExternalStore`. And once you understand it, you can build your own state management solution — type-safe, SSR-compatible, zero dependencies — in about 30 lines of TypeScript.
+
+More importantly, you'll understand *why* it exists, what problem it solves, and why every serious state library in the React ecosystem uses it under the hood.
+
+## The bug that most React developers don't know exists
+
+Let me show you a pattern that's in thousands of React codebases right now. It looks correct. It passes code review. It works in development. And it has a subtle, devastating bug.
+
+```tsx
+function useExternalValue() {
+  const [value, setValue] = useState(store.getValue());
+
+  useEffect(() => {
+    return store.subscribe(() => {
+      setValue(store.getValue());
+    });
+  }, []);
+
+  return value;
+}
+```
+
+This is the classic "subscribe to external store" pattern with `useState` + `useEffect`. What's wrong with it?
+
+**Problem 1: The double render.** On mount, `useState` captures the initial value. Then `useEffect` fires (after the DOM is painted), subscribes, and immediately reads the store again. If the value changed between render and effect — which is totally possible — you get a flash of stale data followed by a correction. Users see a flicker.
+
+**Problem 2: The subscription gap.** Between the first render and the `useEffect` callback, there's a window where store changes are invisible. If the store updates during that gap, you miss the change entirely until the next render.
+
+**Problem 3 — the big one: Tearing.**
+
+This is the bug that will never show up in your tests but will haunt your users.
+
+### What is tearing?
+
+Since React 18, rendering is *concurrent*. React can pause mid-render to handle higher-priority work (like user input), then resume. This is what makes `startTransition` and Suspense work smoothly.
+
+But here's the issue. Imagine 10 components reading from the same store:
+
+1. React starts rendering. Components 1-4 read `store.value = "hello"`.
+2. React **yields** — pauses rendering to handle a click event.
+3. During the pause, the store updates: `store.value = "world"`.
+4. React resumes. Components 5-10 read `store.value = "world"`.
+5. React commits. The user sees a UI where some components show "hello" and others show "world".
+
+That's tearing. Half your UI shows one version of reality, half shows another. The term comes from graphics programming — it's like screen tearing when your monitor shows parts of two different frames.
+
+In synchronous rendering (React 17), this couldn't happen because rendering was uninterruptible. Concurrent rendering broke that guarantee for external stores.
+
+The React team spent years trying to solve this. They first built `useMutableSource`, which tried to maintain concurrent rendering for external stores. It had critical flaws — selector resubscription, Suspense fallback issues, unpredictable behavior. They scrapped it entirely.
+
+The replacement is `useSyncExternalStore`. The trade-off is in the name: **sync**. When an external store changes, React renders synchronously (no time-slicing). You lose concurrent rendering for store updates, but you get a guarantee: **every component in the tree sees the same snapshot. No tearing. Ever.**
+
+## The API — three arguments, zero magic
+
+```ts
+const snapshot = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot?);
+```
+
+| Argument | What it does |
+|----------|-------------|
+| `subscribe(callback)` | Tell the store to call `callback` when it changes. Return an unsubscribe function. |
+| `getSnapshot()` | Return the current value. Must return the **same reference** if nothing changed (`Object.is` comparison). |
+| `getServerSnapshot()` | Return the initial value for SSR. Optional — but React throws if you're server-rendering without it. |
+
+That's it. No providers. No context. No reducers. No middleware. Three functions.
+
+React calls `getSnapshot` synchronously during render. If the store changes during a concurrent render, React detects the mismatch (by calling `getSnapshot` again before committing) and restarts the render synchronously. This is the anti-tearing mechanism.
+
+## Let's build something real
+
+Enough theory. Let's build a store that's:
+- Type-safe (full TypeScript inference)
+- SSR-compatible
+- Supports selectors (subscribe to a slice, not the whole state)
+- Has no dependencies
+- Fits in 30 lines
+
+```ts
+import { useCallback, useSyncExternalStore } from 'react';
+
+type Listener = () => void;
+
+export function createStore<T>(initialState: T) {
+  let state = initialState;
+  const listeners = new Set<Listener>();
+
+  const getState = () => state;
+  const getInitialState = () => initialState;
+
+  const setState = (updater: T | ((prev: T) => T)) => {
+    const next = typeof updater === 'function'
+      ? (updater as (prev: T) => T)(state)
+      : updater;
+    if (Object.is(state, next)) return;
+    state = next;
+    listeners.forEach((l) => l());
+  };
+
+  const subscribe = (listener: Listener) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  };
+
+  function useStore(): T;
+  function useStore<S>(selector: (state: T) => S): S;
+  function useStore<S>(selector?: (state: T) => S) {
+    const sel = selector ?? ((s: T) => s as unknown as S);
+    return useSyncExternalStore(
+      subscribe,
+      useCallback(() => sel(getState()), [sel]),
+      useCallback(() => sel(getInitialState()), [sel]),
+    );
+  }
+
+  return { getState, setState, subscribe, useStore };
+}
+```
+
+That's it. 30 lines. Let's use it:
+
+```tsx
+// store.ts
+const counterStore = createStore({ count: 0, name: 'My Counter' });
+
+export const { useStore: useCounter, setState: setCounter } = counterStore;
+
+// Counter.tsx
+function Counter() {
+  const count = useCounter((s) => s.count);
+  return (
+    <div>
+      <span>{count}</span>
+      <button onClick={() => setCounter((s) => ({ ...s, count: s.count + 1 }))}>
+        +
+      </button>
+    </div>
+  );
+}
+
+// Header.tsx — only re-renders when name changes, not count
+function Header() {
+  const name = useCounter((s) => s.name);
+  return <h1>{name}</h1>;
+}
+```
+
+The `Header` component subscribes to `s.name`. When `count` changes, `getSnapshot` returns `"My Counter"` — the same string reference. `Object.is("My Counter", "My Counter")` is `true`. React skips the re-render. No `React.memo`, no `useMemo`, no selector memoization libraries. Just `Object.is`.
+
+## The gotchas that'll bite you at 2 AM
+
+I wouldn't be honest if I didn't show you where this goes wrong.
+
+### Gotcha 1: Returning new objects from selectors
+
+```tsx
+// BUG: new object every call → infinite re-render loop
+const { count, name } = useCounter((s) => ({ count: s.count, name: s.name }));
+```
+
+The selector returns a new `{}` every time. `Object.is({}, {})` is `false`. React thinks the store changed, re-renders, calls the selector again, gets another new object, re-renders again... forever.
+
+**Fix:** Select primitives individually, or use a shallow comparison wrapper:
+
+```tsx
+// Option 1: separate selectors (simplest)
+const count = useCounter((s) => s.count);
+const name = useCounter((s) => s.name);
+
+// Option 2: shallow equality (what Zustand does with `useShallow`)
+function useStoreShallow<T, S>(store: ..., selector: (s: T) => S): S {
+  const prev = useRef<S>();
+  return useSyncExternalStore(subscribe, () => {
+    const next = selector(getState());
+    if (prev.current && shallowEqual(prev.current, next)) return prev.current;
+    prev.current = next;
+    return next;
+  });
+}
+```
+
+This is exactly why Zustand has `useShallow` — it's not a Zustand feature, it's a `useSyncExternalStore` constraint.
+
+### Gotcha 2: Defining subscribe inline
+
+```tsx
+// BUG: new function every render → resubscribes every render
+function MyComponent() {
+  const value = useSyncExternalStore(
+    (cb) => store.subscribe(cb), // new arrow function each render!
+    store.getSnapshot,
+  );
+}
+```
+
+React sees a new `subscribe` function, unsubscribes from the old one, subscribes with the new one. Every render. Define `subscribe` outside the component, or wrap it in `useCallback`.
+
+### Gotcha 3: Forgetting `getServerSnapshot`
+
+If you server-render and omit the third argument, React throws:
+
+```
+Missing getServerSnapshot, which is required for server-rendered content.
+```
+
+For browser-only APIs, provide a sensible default:
+
+```tsx
+const isOnline = useSyncExternalStore(
+  subscribeOnline,
+  () => navigator.onLine,
+  () => true, // assume online during SSR
+);
+```
+
+## Real-world recipes you'll actually use
+
+### Recipe 1: Online status
+
+```ts
+const subscribe = (cb: () => void) => {
+  window.addEventListener('online', cb);
+  window.addEventListener('offline', cb);
+  return () => {
+    window.removeEventListener('online', cb);
+    window.removeEventListener('offline', cb);
+  };
+};
+
+export function useOnlineStatus() {
+  return useSyncExternalStore(subscribe, () => navigator.onLine, () => true);
+}
+```
+
+### Recipe 2: Media queries (responsive breakpoints without CSS)
+
+```ts
+export function useMediaQuery(query: string) {
+  const subscribe = useCallback((cb: () => void) => {
+    const mql = window.matchMedia(query);
+    mql.addEventListener('change', cb);
+    return () => mql.removeEventListener('change', cb);
+  }, [query]);
+
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
+}
+
+// Usage
+const isMobile = useMediaQuery('(max-width: 768px)');
+const prefersDark = useMediaQuery('(prefers-color-scheme: dark)');
+```
+
+### Recipe 3: localStorage with cross-tab sync
+
+This one's my favorite. `localStorage` has no built-in subscription mechanism — except for the `storage` event, which fires in *other tabs* when a value changes. Combined with `useSyncExternalStore`, you get cross-tab reactive state for free:
+
+```ts
+export function useLocalStorage<T>(key: string, initial: T) {
+  const subscribe = useCallback((cb: () => void) => {
+    const onStorage = (e: StorageEvent) => { if (e.key === key) cb(); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [key]);
+
+  const getSnapshot = useCallback((): T => {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : initial;
+  }, [key, initial]);
+
+  const value = useSyncExternalStore(subscribe, getSnapshot, () => initial);
+
+  const setValue = useCallback((v: T) => {
+    localStorage.setItem(key, JSON.stringify(v));
+    // Trigger re-render in THIS tab (storage event only fires in other tabs)
+    window.dispatchEvent(new StorageEvent('storage', { key }));
+  }, [key]);
+
+  return [value, setValue] as const;
+}
+```
+
+Now open two tabs. Change the value in one. Watch the other update instantly. No WebSockets. No polling. Just the platform.
+
+## The libraries you use every day? They all use this hook
+
+Let me show you where `useSyncExternalStore` lives in the wild:
+
+**Zustand v5** — the `useStore` hook:
+
+```ts
+// From zustand/src/react.ts (simplified)
+const slice = React.useSyncExternalStore(
+  api.subscribe,
+  React.useCallback(() => selector(api.getState()), [api, selector]),
+  React.useCallback(() => selector(api.getInitialState()), [api, selector]),
+);
+```
+
+**React-Redux v8** — the `useSelector` hook:
+
+```ts
+// Internally uses useSyncExternalStoreWithSelector
+return useSyncExternalStoreWithSelector(
+  store.subscribe,
+  store.getState,
+  getServerState,
+  selector,
+  equalityFn,
+);
+```
+
+React-Redux v7 had hundreds of lines of custom subscription logic, manual batching hacks, and complex synchronization code. v8 replaced it all with this hook. The public API (`useSelector`, `useDispatch`, `Provider`) didn't change at all.
+
+**TanStack Query**, **Jotai**, **Valtio** — same story. Different APIs on top, same hook underneath.
+
+The next time someone asks you "Zustand or Redux?", you can answer: "They both use the same React primitive. The question is which API you prefer on top."
+
+## When you should NOT use this
+
+To be fair, there are cases where `useSyncExternalStore` is the wrong tool:
+
+- **For React-managed state** — `useState` and `useReducer` work with concurrent rendering natively. They don't need the sync fallback.
+- **If you already use Zustand/Redux** — they call this hook internally. Adding your own layer on top adds complexity for no benefit.
+- **For one-shot reads** — if you need a value once (not a subscription), `useEffect` with a ref is simpler.
+- **For high-frequency updates** — scroll position, mouse coordinates, animation frames. At 60+ events per second, you need `requestAnimationFrame` batching or a coarse-grained `getSnapshot` (e.g., round to nearest 50px). Raw `useSyncExternalStore` will trigger 60 re-renders per second.
+
+## The mental model
+
+Here's how I think about it now:
+
+`useState` is for state that **React owns**. Component-local values, form inputs, UI toggles. React controls when and how these update, and gets full concurrent rendering in return.
+
+`useSyncExternalStore` is for state that **lives outside React**. Browser APIs, WebSocket connections, shared stores, third-party SDKs. React can't control when these update, so it trades concurrent rendering for consistency.
+
+The boundary between these two is the boundary between "React's world" and "everything else." Once you see it, you see it everywhere.
+
+---
+
+*Zustand is still great. Redux Toolkit is still great. You should probably keep using them. But now you know what's inside — and if you ever need a tiny, custom store for a specific use case, you know exactly how to build one. In 30 lines.*
