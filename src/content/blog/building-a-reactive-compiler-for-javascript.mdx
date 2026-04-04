@@ -3,12 +3,9 @@ title: "I Built a Reactive Compiler for JavaScript — Here's Where It Broke"
 description: "When should a reactive variable behave like an object and when like a value? This question led me through compiler theory, TypeScript hacks, hydration nightmares, and the realization that specification-by-example always has gaps."
 pubDate: 2026-04-04T12:00:00
 tags: ["javascript", "compiler", "signals", "typescript", "react", "web-development"]
+series: { name: "Building My Own Framework", part: 2, total: 3 }
 draft: false
 ---
-
-> **This is Part 2 of a three-part series.**
-> [Part 1: I Designed a Web Framework With Two Imports](/blog/designed-a-web-framework-with-two-imports) |
-> [Part 3: Why I Stopped Building My JavaScript Framework](/blog/why-i-stopped-building-my-javascript-framework)
 
 In [Part 1](/blog/designed-a-web-framework-with-two-imports), I showed you the vision: a framework where you write `let count = signal(0)`, `const doubled = count * 2`, and the compiler handles the rest. Two imports, zero ceremony, Solid-level performance with React-like syntax.
 

@@ -11,6 +11,15 @@ export default defineConfig({
   site: 'https://maryanmats.com',
   integrations: [mdx(), sitemap()],
 
+  markdown: {
+    shikiConfig: {
+      themes: {
+        light: 'github-light',
+        dark: 'github-dark',
+      },
+    },
+  },
+
   vite: {
     plugins: [tailwindcss()],
   },

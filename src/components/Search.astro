@@ -1,0 +1,156 @@
+---
+---
+
+<div id="search-container" class="relative">
+  <button
+    id="search-trigger"
+    class="flex items-center gap-1.5 px-2 py-1 rounded-md text-ink-faint hover:text-green hover:bg-green-subtle transition-all duration-200 cursor-pointer"
+    aria-label="Search articles"
+  >
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+    <span class="text-[11px] font-mono hidden sm:inline">Search</span>
+  </button>
+
+  <!-- Modal overlay -->
+  <div id="search-modal" class="search-modal fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-label="Search">
+    <div class="absolute inset-0 bg-page/80 backdrop-blur-sm" id="search-backdrop"></div>
+    <div class="relative max-w-xl mx-auto mt-[15vh] px-4">
+      <div class="rounded-xl border border-line bg-panel shadow-2xl overflow-hidden">
+        <div class="flex items-center gap-3 px-4 border-b border-line">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="text-ink-faint shrink-0" aria-hidden="true">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="Search articles..."
+            class="w-full py-3 text-sm bg-transparent text-ink placeholder:text-ink-faint outline-none font-mono"
+            autocomplete="off"
+          />
+          <kbd class="hidden sm:inline text-[10px] font-mono text-ink-faint border border-line rounded px-1.5 py-0.5">ESC</kbd>
+        </div>
+        <div id="search-results" class="max-h-[50vh] overflow-y-auto p-2">
+          <p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  #search-results a {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: background 0.15s;
+  }
+  #search-results a:hover {
+    background: var(--c-green-subtle);
+  }
+  #search-results a .search-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--c-ink);
+  }
+  #search-results a:hover .search-title {
+    color: var(--c-green);
+  }
+  #search-results a .search-excerpt {
+    font-size: 0.75rem;
+    color: var(--c-ink-faint);
+    margin-top: 0.125rem;
+  }
+  #search-results mark {
+    background: var(--c-green-subtle);
+    color: var(--c-green);
+  }
+</style>
+
+<script>
+  let pagefind: any = null;
+
+  async function loadPagefind() {
+    if (pagefind) return pagefind;
+    try {
+      // Dynamic import hidden from Vite bundler
+      const path = '/pagefind/pagefind.js';
+      pagefind = await import(/* @vite-ignore */ path);
+      await pagefind.init();
+    } catch {
+      pagefind = null;
+    }
+    return pagefind;
+  }
+
+  function initSearch() {
+    const trigger = document.getElementById('search-trigger');
+    const modal = document.getElementById('search-modal');
+    const backdrop = document.getElementById('search-backdrop');
+    const input = document.getElementById('search-input') as HTMLInputElement | null;
+    const results = document.getElementById('search-results');
+    if (!trigger || !modal || !input || !results || !backdrop) return;
+
+    function open() {
+      modal.classList.remove('hidden');
+      input.value = '';
+      results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+      requestAnimationFrame(() => input.focus());
+      loadPagefind();
+    }
+
+    function close() {
+      modal.classList.add('hidden');
+    }
+
+    trigger.addEventListener('click', open);
+    backdrop.addEventListener('click', close);
+
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        modal.classList.contains('hidden') ? open() : close();
+      }
+      if (e.key === 'Escape') close();
+    });
+
+    let debounce: ReturnType<typeof setTimeout>;
+    input.addEventListener('input', () => {
+      clearTimeout(debounce);
+      debounce = setTimeout(async () => {
+        const query = input.value.trim();
+        if (!query) {
+          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+          return;
+        }
+
+        const pf = await loadPagefind();
+        if (!pf) {
+          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
+          return;
+        }
+
+        const search = await pf.search(query);
+        if (search.results.length === 0) {
+          results.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">No results found.</p>';
+          return;
+        }
+
+        const items = await Promise.all(search.results.slice(0, 8).map((r: any) => r.data()));
+        results.innerHTML = items.map((item: any) =>
+          `<a href="${item.url}">
+            <div class="search-title">${item.meta?.title ?? item.url}</div>
+            <div class="search-excerpt">${item.excerpt}</div>
+          </a>`
+        ).join('');
+      }, 200);
+    });
+  }
+
+  initSearch();
+  document.addEventListener('astro:after-swap', initSearch);
+</script>

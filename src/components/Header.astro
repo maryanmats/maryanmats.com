@@ -1,5 +1,6 @@
 ---
 import Icon from './Icon.astro';
+import Search from './Search.astro';
 import ThemeToggle from './ThemeToggle.astro';
 
 const pathname = Astro.url.pathname.replace(import.meta.env.BASE_URL, '');
@@ -51,7 +52,8 @@ const links = [
     </div>
 
     <!-- Right cluster -->
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-3">
+      <Search />
       <a
         href="/rss.xml"
         class="hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-md text-ink-faint hover:text-green hover:bg-green-subtle transition-all duration-200 no-underline"

@@ -20,11 +20,18 @@ interface NavPost {
   title: string;
 }
 
+interface SeriesPost {
+  id: string;
+  title: string;
+  part: number;
+}
+
 type Props = CollectionEntry<'blog'>['data'] & {
   readingTime?: number;
   headings?: Heading[];
   prev?: NavPost;
   next?: NavPost;
+  seriesPosts?: SeriesPost[];
 };
 
 const {
@@ -33,10 +40,12 @@ const {
   pubDate,
   updatedDate,
   tags = [],
+  series,
   readingTime,
   headings = [],
   prev,
   next,
+  seriesPosts = [],
 } = Astro.props;
 ---
 
@@ -106,6 +115,32 @@ const {
       </div>
 
       <div class="mt-8 h-px bg-line"></div>
+
+      {series && seriesPosts.length > 1 && (
+        <nav class="mt-6 px-4 py-3 rounded-lg border border-line bg-panel/50" aria-label="Series navigation">
+          <p class="text-[10px] font-mono text-ink-faint uppercase tracking-widest mb-2">
+            {series.name} — Part {series.part} of {series.total}
+          </p>
+          <ol class="space-y-1">
+            {seriesPosts.map((sp) => (
+              <li class="text-[13px]">
+                {sp.part === series.part ? (
+                  <span class="flex items-center gap-2">
+                    <span class="w-1 h-1 rounded-full bg-green shrink-0"></span>
+                    <span class="font-medium text-ink">{sp.title}</span>
+                    <span class="text-[9px] font-mono text-green ml-1">current</span>
+                  </span>
+                ) : (
+                  <a href={`/blog/${sp.id}/`} class="flex items-center gap-2 text-ink-muted hover:text-green no-underline transition-colors">
+                    <span class="w-1 h-1 rounded-full bg-line shrink-0"></span>
+                    <span>{sp.title}</span>
+                  </a>
+                )}
+              </li>
+            ))}
+          </ol>
+        </nav>
+      )}
     </header>
 
     <div class="lg:flex lg:gap-14 pb-20">

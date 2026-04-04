@@ -25,8 +25,18 @@ interface Props {
 const { post, prev, next } = Astro.props;
 const { Content, headings } = await render(post);
 const readingTime = getReadingTime(post.body ?? '');
+
+// Find sibling posts in the same series
+let seriesPosts: { id: string; title: string; part: number }[] = [];
+if (post.data.series) {
+  const allPosts = await getPublishedPosts();
+  seriesPosts = allPosts
+    .filter(p => p.data.series?.name === post.data.series!.name)
+    .map(p => ({ id: p.id, title: p.data.title, part: p.data.series!.part }))
+    .sort((a, b) => a.part - b.part);
+}
 ---
 
-<BlogPost {...post.data} readingTime={readingTime} headings={headings} prev={prev} next={next}>
+<BlogPost {...post.data} readingTime={readingTime} headings={headings} prev={prev} next={next} seriesPosts={seriesPosts}>
   <Content />
 </BlogPost>

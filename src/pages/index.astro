@@ -103,8 +103,15 @@ const posts = (await getPublishedPosts()).slice(0, 5);
               >
                 <FormattedDate date={post.data.pubDate} />
               </time>
-              <span class="flex-1 min-w-0 font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
-                {post.data.title}
+              <span class="flex-1 min-w-0">
+                <span class="font-display font-600 text-ink group-hover:text-green transition-colors duration-200">
+                  {post.data.title}
+                </span>
+                {post.data.series && (
+                  <span class="ml-2 inline-block px-1.5 py-0.5 text-[9px] font-mono text-green bg-green-subtle rounded align-middle">
+                    {post.data.series.part}/{post.data.series.total}
+                  </span>
+                )}
               </span>
               <span class="text-[11px] font-mono text-ink-faint shrink-0 hidden md:block">
                 {getReadingTime(post.body ?? '')} min
