@@ -133,21 +133,21 @@ const links = [
     const menu = document.getElementById('mobile-menu');
     if (!btn || !menu) return;
 
-    const hamburger = btn.querySelector('.hamburger-icon');
-    const close = btn.querySelector('.close-icon');
+    const hamburgerIcon = btn.querySelector('.hamburger-icon');
+    const closeIcon = btn.querySelector('.close-icon');
 
     function toggle() {
       const isOpen = !menu.classList.contains('hidden');
       menu.classList.toggle('hidden');
-      hamburger?.classList.toggle('hidden');
-      close?.classList.toggle('hidden');
+      hamburgerIcon?.classList.toggle('hidden');
+      closeIcon?.classList.toggle('hidden');
       btn.setAttribute('aria-expanded', String(!isOpen));
     }
 
     function closeMenu() {
       menu.classList.add('hidden');
-      hamburger?.classList.remove('hidden');
-      close?.classList.add('hidden');
+      hamburgerIcon?.classList.remove('hidden');
+      closeIcon?.classList.add('hidden');
       btn.setAttribute('aria-expanded', 'false');
     }
 
