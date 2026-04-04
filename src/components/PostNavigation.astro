@@ -1,0 +1,37 @@
+---
+interface NavPost {
+  id: string;
+  title: string;
+}
+
+interface Props {
+  prev?: NavPost;
+  next?: NavPost;
+}
+
+const { prev, next } = Astro.props;
+---
+
+{(prev || next) && (
+  <nav aria-label="Article navigation" class="max-w-[680px] pb-16">
+    <div class="h-px bg-line mb-8"></div>
+    <div class="grid grid-cols-2 gap-4">
+      {prev ? (
+        <a href={`/blog/${prev.id}/`} class="group flex flex-col gap-1 no-underline">
+          <span class="text-[10px] font-mono text-ink-faint">&larr; Previous</span>
+          <span class="text-sm font-display font-600 text-ink group-hover:text-green transition-colors duration-200 line-clamp-1">
+            {prev.title}
+          </span>
+        </a>
+      ) : <div />}
+      {next ? (
+        <a href={`/blog/${next.id}/`} class="group flex flex-col gap-1 no-underline text-right ml-auto">
+          <span class="text-[10px] font-mono text-ink-faint">Next &rarr;</span>
+          <span class="text-sm font-display font-600 text-ink group-hover:text-green transition-colors duration-200 line-clamp-1">
+            {next.title}
+          </span>
+        </a>
+      ) : <div />}
+    </div>
+  </nav>
+)}
