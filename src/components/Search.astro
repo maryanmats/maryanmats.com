@@ -1,4 +1,5 @@
 ---
+
 ---
 
 <div id="search-container" class="relative">
@@ -7,22 +8,54 @@
     class="flex items-center gap-1.5 px-2 py-1 rounded-md text-ink-faint hover:text-green hover:bg-green-subtle transition-all duration-200 cursor-pointer"
     aria-label="Search articles"
   >
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="8"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
     </svg>
     <span class="text-[11px] font-mono hidden sm:inline">Search</span>
   </button>
 
   <!-- Modal overlay -->
-  <div id="search-modal" class="search-modal fixed inset-0 z-[999] hidden" role="dialog" aria-modal="true" aria-label="Search">
-    <div class="absolute inset-0 bg-page/80 backdrop-blur-sm" id="search-backdrop"></div>
+  <div
+    id="search-modal"
+    class="search-modal fixed inset-0 z-[999] hidden"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Search"
+  >
+    <div
+      class="absolute inset-0 bg-page/80 backdrop-blur-sm"
+      id="search-backdrop"
+    >
+    </div>
     <div class="relative max-w-xl mx-auto mt-[15vh] px-4">
-      <div class="rounded-xl border border-line bg-panel shadow-2xl overflow-hidden">
+      <div
+        class="rounded-xl border border-line bg-panel shadow-2xl overflow-hidden"
+      >
         <div class="flex items-center gap-3 px-4 border-b border-line">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" class="text-ink-faint shrink-0" aria-hidden="true">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            class="text-ink-faint shrink-0"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
           </svg>
           <input
             id="search-input"
@@ -31,10 +64,15 @@
             class="w-full py-3 text-sm bg-transparent text-ink placeholder:text-ink-faint font-mono outline-none border-none ring-0 focus:outline-none focus:ring-0 focus:border-none"
             autocomplete="off"
           />
-          <kbd class="hidden sm:inline text-[10px] font-mono text-ink-faint border border-line rounded px-1.5 py-0.5">ESC</kbd>
+          <kbd
+            class="hidden sm:inline text-[10px] font-mono text-ink-faint border border-line rounded px-1.5 py-0.5"
+            >ESC</kbd
+          >
         </div>
         <div id="search-results" class="max-h-[50vh] overflow-y-auto p-2">
-          <p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>
+          <p class="text-xs text-ink-faint font-mono px-3 py-4">
+            Type to search...
+          </p>
         </div>
       </div>
     </div>
@@ -83,7 +121,9 @@
   let pagefind: any = null;
 
   async function loadPagefind() {
-    if (pagefind) {return pagefind;}
+    if (pagefind) {
+      return pagefind;
+    }
     try {
       // Dynamic import hidden from Vite bundler
       const path = '/pagefind/pagefind.js';
@@ -99,9 +139,13 @@
     const trigger = document.getElementById('search-trigger');
     const modal = document.getElementById('search-modal');
     const backdrop = document.getElementById('search-backdrop');
-    const input = document.getElementById('search-input') as HTMLInputElement | null;
+    const input = document.getElementById(
+      'search-input',
+    ) as HTMLInputElement | null;
     const results = document.getElementById('search-results');
-    if (!trigger || !modal || !input || !results || !backdrop) {return;}
+    if (!trigger || !modal || !input || !results || !backdrop) {
+      return;
+    }
 
     const m = modal;
     const inp = input;
@@ -110,7 +154,8 @@
     function open() {
       m.classList.remove('hidden');
       inp.value = '';
-      res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+      res.innerHTML =
+        '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
       requestAnimationFrame(() => inp.focus());
       loadPagefind();
     }
@@ -131,7 +176,9 @@
           close();
         }
       }
-      if (e.key === 'Escape') {close();}
+      if (e.key === 'Escape') {
+        close();
+      }
     });
 
     let debounce: ReturnType<typeof setTimeout>;
@@ -140,31 +187,39 @@
       debounce = setTimeout(async () => {
         const query = inp.value.trim();
         if (!query) {
-          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
+          res.innerHTML =
+            '<p class="text-xs text-ink-faint font-mono px-3 py-4">Type to search...</p>';
           return;
         }
 
         const pf = await loadPagefind();
         if (!pf) {
-          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
+          res.innerHTML =
+            '<p class="text-xs text-ink-faint font-mono px-3 py-4">Search unavailable in dev mode. Run npm run build first.</p>';
           return;
         }
 
         const search = await pf.search(query);
         if (search.results.length === 0) {
-          res.innerHTML = '<p class="text-xs text-ink-faint font-mono px-3 py-4">No results found.</p>';
+          res.innerHTML =
+            '<p class="text-xs text-ink-faint font-mono px-3 py-4">No results found.</p>';
           return;
         }
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const items = await Promise.all(search.results.slice(0, 8).map((r: any) => r.data()));
+        const items = await Promise.all(
+          search.results.slice(0, 8).map((r: any) => r.data()),
+        );
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        res.innerHTML = items.map((item: any) =>
-          `<a href="${item.url}">
+        res.innerHTML = items
+          .map(
+            (item: any) =>
+              `<a href="${item.url}">
             <div class="search-title">${item.meta?.title ?? item.url}</div>
             <div class="search-excerpt">${item.excerpt}</div>
-          </a>`
-        ).join('');
+          </a>`,
+          )
+          .join('');
       }, 200);
     });
   }

@@ -1,0 +1,22 @@
+---
+
+---
+
+<div id="reading-progress"></div>
+
+<script>
+  function initProgress() {
+    const bar = document.getElementById('reading-progress');
+    function update() {
+      if (!bar) {
+        return;
+      }
+      const h = document.documentElement.scrollHeight - window.innerHeight;
+      bar.style.width = h > 0 ? `${(window.scrollY / h) * 100}%` : '0%';
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  }
+  initProgress();
+  document.addEventListener('astro:after-swap', initProgress);
+</script>
