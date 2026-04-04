@@ -6,18 +6,27 @@ import { getReadingTime } from '../../utils/reading-time';
 
 export async function getStaticPaths() {
   const posts = await getPublishedPosts();
-  return posts.map((post) => ({
+  return posts.map((post, i) => ({
     params: { slug: post.id },
-    props: post,
+    props: {
+      post,
+      prev: posts[i + 1] ? { id: posts[i + 1].id, title: posts[i + 1].data.title } : undefined,
+      next: posts[i - 1] ? { id: posts[i - 1].id, title: posts[i - 1].data.title } : undefined,
+    },
   }));
 }
-type Props = CollectionEntry<'blog'>;
 
-const post = Astro.props;
+interface Props {
+  post: CollectionEntry<'blog'>;
+  prev?: { id: string; title: string };
+  next?: { id: string; title: string };
+}
+
+const { post, prev, next } = Astro.props;
 const { Content, headings } = await render(post);
 const readingTime = getReadingTime(post.body ?? '');
 ---
 
-<BlogPost {...post.data} readingTime={readingTime} headings={headings}>
+<BlogPost {...post.data} readingTime={readingTime} headings={headings} prev={prev} next={next}>
   <Content />
 </BlogPost>

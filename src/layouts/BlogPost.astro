@@ -1,7 +1,10 @@
 ---
 import type { CollectionEntry } from 'astro:content';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
+import CopyCodeButton from '../components/CopyCodeButton.astro';
 import FormattedDate from '../components/FormattedDate.astro';
+import PostNavigation from '../components/PostNavigation.astro';
+import ShareButton from '../components/ShareButton.astro';
 import TableOfContents from '../components/TableOfContents.astro';
 import { SITE_AUTHOR } from '../consts';
 import BaseLayout from './BaseLayout.astro';
@@ -12,9 +15,16 @@ interface Heading {
   text: string;
 }
 
+interface NavPost {
+  id: string;
+  title: string;
+}
+
 type Props = CollectionEntry<'blog'>['data'] & {
   readingTime?: number;
   headings?: Heading[];
+  prev?: NavPost;
+  next?: NavPost;
 };
 
 const {
@@ -25,6 +35,8 @@ const {
   tags = [],
   readingTime,
   headings = [],
+  prev,
+  next,
 } = Astro.props;
 ---
 
@@ -50,52 +62,47 @@ const {
     </div>
 
     <header class="max-w-[680px] mb-10 animate-fade-up">
-      {
-        tags.length > 0 && (
-          <div class="flex flex-wrap gap-2 mb-4">
-            {tags.map((tag) => (
-              <a
-                href={`/blog/tag/${tag}/`}
-                class="px-2 py-0.5 text-[10px] font-mono rounded-md bg-green/8 text-green no-underline hover:bg-green/15 transition-colors duration-200"
-              >
-                {tag}
-              </a>
-            ))}
-          </div>
-        )
-      }
+      {tags.length > 0 && (
+        <div class="flex flex-wrap gap-2 mb-4">
+          {tags.map((tag) => (
+            <a
+              href={`/blog/tag/${tag}/`}
+              class="px-2 py-0.5 text-[10px] font-mono rounded-md bg-green/8 text-green no-underline hover:bg-green/15 transition-colors duration-200"
+            >
+              {tag}
+            </a>
+          ))}
+        </div>
+      )}
 
-      <h1
-        class="font-display text-3xl md:text-[2.6rem] font-800 leading-[1.15] tracking-tight mb-4"
-      >
+      <h1 class="font-display text-3xl md:text-[2.6rem] font-800 leading-[1.15] tracking-tight mb-4">
         {title}
       </h1>
       <p class="text-ink-muted text-[15px] leading-relaxed mb-5 max-w-xl">
         {description}
       </p>
 
-      <div class="flex items-center gap-3 text-[11px] font-mono text-ink-faint">
-        <span>{SITE_AUTHOR}</span>
-        <span class="text-line">/</span>
-        <FormattedDate date={pubDate} />
-        {
-          readingTime && (
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3 text-[11px] font-mono text-ink-faint">
+          <span>{SITE_AUTHOR}</span>
+          <span class="text-line">/</span>
+          <FormattedDate date={pubDate} />
+          {readingTime && (
             <>
               <span class="text-line">/</span>
               <span>{readingTime} min read</span>
             </>
-          )
-        }
-        {
-          updatedDate && (
+          )}
+          {updatedDate && (
             <>
               <span class="text-line">/</span>
               <span class="italic">
                 updated <FormattedDate date={updatedDate} />
               </span>
             </>
-          )
-        }
+          )}
+        </div>
+        <ShareButton title={title} />
       </div>
 
       <div class="mt-8 h-px bg-line"></div>
@@ -105,30 +112,25 @@ const {
       <div class="prose max-w-[680px] flex-1 min-w-0">
         <slot />
       </div>
-      {
-        headings.length > 0 && (
-          <aside
-            class="hidden lg:block w-48 shrink-0"
-            aria-label="Table of contents"
-          >
-            <div class="sticky top-20">
-              <TableOfContents headings={headings} />
-            </div>
-          </aside>
-        )
-      }
+      {headings.length > 0 && (
+        <aside class="hidden lg:block w-48 shrink-0" aria-label="Table of contents">
+          <div class="sticky top-20">
+            <TableOfContents headings={headings} />
+          </div>
+        </aside>
+      )}
     </div>
+
+    <PostNavigation prev={prev} next={next} />
 
     <div class="max-w-[680px] pb-16">
       <div class="h-px bg-line mb-6"></div>
-      <div
-        class="flex items-center justify-between text-[11px] font-mono text-ink-faint"
-      >
+      <div class="flex items-center justify-between text-[11px] font-mono text-ink-faint">
         <span>Thanks for reading.</span>
-        <a href="/blog" class="hover:text-green no-underline transition-colors"
-          >More articles &rarr;</a
-        >
+        <a href="/blog" class="hover:text-green no-underline transition-colors">More articles &rarr;</a>
       </div>
     </div>
   </article>
+
+  <CopyCodeButton />
 </BaseLayout>
