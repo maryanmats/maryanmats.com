@@ -1,0 +1,326 @@
+---
+title: "Stop Writing try/catch — Your TypeScript Errors Deserve Types"
+description: "Your function signatures only show the happy path. TypeScript is blind to errors — by design. Here's why the man who designed TypeScript rejected typed exceptions, and what to use instead."
+pubDate: 2026-04-10T10:00:00
+tags: ["typescript", "javascript", "error-handling", "programming", "clean-code", "web-development", "result-type", "best-practices"]
+draft: false
+---
+
+Look at this function signature.
+
+```ts
+function fetchUser(id: string): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  return res.json();
+}
+```
+
+It says: "Give me a string, I'll give you a User." Clean. Typed. Beautiful.
+
+It's also a lie.
+
+That function can throw a `TypeError` if the network is down. A `SyntaxError` if the response isn't JSON. A `DOMException` if the request is aborted. A random string if some dependency deep in the call stack decides to `throw "oops"`. Yes — JavaScript lets you throw *literally anything*. A string. A number. `null`. A Promise. `undefined`.
+
+Your type system sees none of this.
+
+`Promise<User>` is the happy path. It's the fairy tale version of your function. The real signature — if TypeScript could express it — would be something like `Promise<User | throws TypeError | SyntaxError | DOMException | string | unknown>`. But TypeScript has no syntax for that. No `throws` clause. No checked exceptions. No way to encode in the type system what a function does when things go wrong.
+
+And this isn't a bug. It's a deliberate design decision by the same person who made the same decision for the same reasons twenty years earlier.
+
+## The man who decided this — twice
+
+Anders Hejlsberg designed C#. Then he designed TypeScript. Neither language has typed exceptions. He explained why in a 2003 Artima interview, and the reasoning applies to both languages word for word.
+
+**The versioning problem.** If `fetchUser` declares it throws `NetworkError` and `ParseError`, and next month you add retry logic that can throw `TimeoutError`, every caller breaks. Adding an exception type to a function is a *breaking change*. In a language like TypeScript, where you import from dozens of npm packages that update independently, this is catastrophic.
+
+**The scalability problem.** "When you start building big systems where you're talking to four or five different subsystems, you end up having to declare 40 exceptions that you might throw. And once you aggregate that with another subsystem you've got 80 exceptions."
+
+**The human problem.** Java tried this. Checked exceptions. Every language that runs on the JVM after Java — Scala, Kotlin, Groovy, Clojure — looked at checked exceptions and said *no*. In practice, Java developers write `throws Exception` (catching everything) or empty `catch {}` blocks. The feature designed to force correct error handling instead *encouraged* ignoring errors.
+
+The TypeScript team closed the `throws` clause proposal (GitHub issue #13219, 279 comments) as "Not Planned." Not because they didn't think about it. Because they *did* think about it and decided it was worse than the problem it solves.
+
+So here we are. TypeScript types your data beautifully and is completely blind to your errors. And if you're only using `try/catch`, you're coding without a safety net in the one place where safety matters most.
+
+## `catch (e: unknown)` — the narrowing nightmare
+
+Before TypeScript 4.4, `catch (e)` gave you `e: any`. You could write `e.message` without checking anything. If someone threw a number instead of an Error, your catch block threw *another* error. Brilliant.
+
+TypeScript 4.4 fixed this with `useUnknownInCatchVariables` (enabled by default under `strict`). Now `catch (e)` gives you `e: unknown`. Better — but look what you have to do:
+
+```ts
+try {
+  const user = await fetchUser(id);
+  await saveToDatabase(user);
+} catch (e: unknown) {
+  if (e instanceof Error) {
+    console.error(e.message);
+  } else {
+    console.error(String(e));
+  }
+}
+```
+
+You're narrowing at runtime because the type system has *no idea* what you caught. And it gets worse.
+
+`instanceof Error` isn't reliable. In JavaScript, each *realm* (window, iframe, web worker, Node.js `vm` module) has its own global objects. An `Error` created in an iframe fails `instanceof Error` in the parent window — different `Error` constructors, different prototype chains. This is so common that TC39 shipped `Error.isError()` (Stage 4, ES2026) specifically to fix it.
+
+And when you subclass `Error` in TypeScript targeting ES5, `instanceof` breaks silently. `class HttpError extends Error` doesn't set the prototype correctly — you need a manual `Object.setPrototypeOf(this, HttpError.prototype)` or your catch blocks will miss your custom errors entirely. TypeScript issue #13965 documents this. It's been open since 2017.
+
+So the pattern is: you throw typed errors, you catch `unknown`, you narrow with `instanceof` which doesn't work across realms, which doesn't work with subclasses unless you add a workaround, and the whole time the compiler offers zero help. This is the state of the art.
+
+## The `async/await` tax
+
+`try/catch` was designed for synchronous code. One operation, one potential failure. But async/await turned every function into a chain, and now you're wrapping entire blocks:
+
+```ts
+try {
+  const response = await fetch('/api/users');
+  const data = await response.json();
+  const validated = validateUser(data);
+  await saveToDatabase(validated);
+} catch (e: unknown) {
+  // Which line failed?
+  // Was it the network? The JSON parse? The validation? The database?
+  // We don't know. One catch block for four completely different failure modes.
+  handleError(e);
+}
+```
+
+You can nest `try/catch` blocks inside each other to catch each operation separately. Nobody does this because it looks horrible. Or you can split every `await` into its own `try/catch`. Nobody does this either because you end up with 30 lines of error handling for 4 lines of logic.
+
+The result? Most developers write a single `catch` block that handles everything the same way. "Something went wrong. Please try again." The user sees a generic error. The developer has no idea what actually failed. The type system shrugs.
+
+## Every modern language figured this out
+
+Here's what convinced me this isn't just a functional programming trend. The convergence is real.
+
+**Rust** has no exceptions. Every function that can fail returns `Result<T, E>`:
+
+```rust
+fn read_config(path: &str) -> Result<Config, ConfigError> {
+    let content = fs::read_to_string(path)?;  // ? returns early on error
+    let config = toml::from_str(&content)?;    // same here
+    Ok(config)
+}
+```
+
+The compiler refuses to compile if you don't handle the `Result`. The `?` operator propagates errors visually — you can see at a glance which lines can fail. The error type is in the signature. Done.
+
+**Go** returns errors as ordinary values:
+
+```go
+user, err := fetchUser(id)
+if err != nil {
+    return fmt.Errorf("fetching user %s: %w", id, err)
+}
+```
+
+Verbose? Yes. But every failure point is visible. No invisible jumps up the call stack. No "which line threw?" mystery.
+
+**Swift 6** added typed throws — `func load() throws(FileError)` — so catch blocks know exactly which errors they're handling.
+
+**Zig** built error unions into the language syntax — `!T` means "a value of type T or an error" — with compile-time-known error sets.
+
+Every language designed in the last fifteen years has moved toward errors as values in the type system. Java's checked exceptions are universally considered a failed experiment. The only question left is ergonomics — how do you make error-as-values feel as natural as `try/catch`?
+
+## The fix: return your errors
+
+Here's the simplest version. No libraries. Pure TypeScript. A discriminated union:
+
+```ts
+type Result<T, E> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
+```
+
+That's it. Two lines. Now use it:
+
+```ts
+type FetchError =
+  | { type: "NETWORK"; message: string }
+  | { type: "PARSE"; raw: string }
+  | { type: "NOT_FOUND"; id: string };
+
+async function fetchUser(id: string): Promise<Result<User, FetchError>> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/users/${id}`);
+  } catch (e) {
+    return { ok: false, error: { type: "NETWORK", message: String(e) } };
+  }
+
+  if (res.status === 404) {
+    return { ok: false, error: { type: "NOT_FOUND", id } };
+  }
+
+  try {
+    return { ok: true, value: await res.json() };
+  } catch {
+    return { ok: false, error: { type: "PARSE", raw: await res.text() } };
+  }
+}
+```
+
+Now the caller:
+
+```ts
+const result = await fetchUser("123");
+
+if (!result.ok) {
+  switch (result.error.type) {
+    case "NETWORK":
+      showRetryDialog();
+      break;
+    case "NOT_FOUND":
+      redirect("/404");
+      break;
+    case "PARSE":
+      reportBug(result.error.raw);
+      break;
+  }
+  return;
+}
+
+// TypeScript knows result.value is User here
+console.log(result.value.name);
+```
+
+Look at what changed. The function signature says `Promise<Result<User, FetchError>>`. The error types are *right there*. The caller handles each error type individually — network errors get a retry dialog, 404s get a redirect, parse errors get a bug report. The type system enforces exhaustive handling. If you add a new error type to `FetchError`, every `switch` that doesn't handle it gets a compile error.
+
+No `instanceof`. No `unknown`. No guessing. The types do the work.
+
+## Want better ergonomics? Meet `neverthrow`
+
+The DIY approach works. But chaining operations gets verbose. `neverthrow` adds `map`, `andThen`, and `match` — the same composition tools that make Rust's `Result` feel natural:
+
+```ts
+import { ok, err, Result, ResultAsync, fromThrowable } from 'neverthrow';
+
+const safeJsonParse = fromThrowable(
+  JSON.parse,
+  (e) => ({ type: "PARSE" as const, message: String(e) })
+);
+
+const fetchUser = (id: string): ResultAsync<User, AppError> =>
+  ResultAsync.fromPromise(
+    fetch(`/api/users/${id}`).then(r => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }),
+    (e) => ({ type: "NETWORK" as const, message: String(e) })
+  );
+
+// Chain operations — errors short-circuit automatically
+fetchUser("123")
+  .andThen(user => validateAge(user))  // ResultAsync<User, AppError | ValidationError>
+  .map(user => user.name)
+  .match(
+    name => showGreeting(name),
+    error => handleError(error)  // called with the FIRST error that occurred
+  );
+```
+
+The `andThen` chain works like a pipeline. If `fetchUser` fails, `validateAge` never runs — the error flows straight to `match`. This is Scott Wlaschin's **Railway Oriented Programming**: two parallel tracks (success and failure), and the moment something fails, everything switches to the failure track.
+
+And `neverthrow`'s `safeTry` gives you something close to Rust's `?` operator:
+
+```ts
+import { safeTry } from 'neverthrow';
+
+const program = safeTry(async function* () {
+  const user = yield* fetchUser("123").safeUnwrap();
+  const orders = yield* fetchOrders(user.id).safeUnwrap();
+  const total = orders.reduce((sum, o) => sum + o.amount, 0);
+  return ok(total);
+});
+// ResultAsync<number, FetchError | OrderError>
+```
+
+Each `yield*` either unwraps the value or returns the error early. The error types accumulate in the union automatically. It reads almost like normal async/await — but every error is typed.
+
+## You're already using this pattern (you just don't know it)
+
+This isn't some functional programming experiment. The libraries you use every day already moved to errors-as-values.
+
+**Zod** has `safeParse`:
+
+```ts
+const result = UserSchema.safeParse(data);
+if (!result.success) {
+  console.log(result.error.issues);  // typed validation errors
+} else {
+  console.log(result.data);  // typed, validated data
+}
+```
+
+That return type is a discriminated union. Success or failure, with typed data in both branches. Zod offers `parse` (throws) *and* `safeParse` (returns) — and the community recommendation is clear: use `safeParse`.
+
+**TanStack Query** returns a discriminated union from every `useQuery`:
+
+```ts
+const { status, data, error } = useQuery({ queryKey: ['user'], queryFn: fetchUser });
+
+if (status === 'success') {
+  // data is User — not User | undefined
+}
+if (status === 'error') {
+  // error is Error — guaranteed
+}
+```
+
+The `status` field narrows the entire result type. This is the same pattern as `Result<T, E>` — just shaped as a React hook.
+
+**React Router / Remix** uses thrown responses for route-level errors, then catches them in `ErrorBoundary` components — separating the happy path (component) from the error path (boundary) *structurally*.
+
+The ecosystem is converging. The only thing left is connecting the dots in your own code.
+
+## Eric Lippert's razor: most of your catch blocks shouldn't exist
+
+Eric Lippert, former C# compiler team member, classified exceptions into four categories. This framework changed how I think about every `catch` block I write:
+
+1. **Fatal** — `OutOfMemoryError`, stack overflow. You can't recover. Don't catch these.
+2. **Boneheaded** — `TypeError`, `ReferenceError`. These are bugs in your code. Fix the bug, don't catch the symptom.
+3. **Vexing** — `JSON.parse` throwing on invalid input. A non-exceptional condition forced through an exception API. Use `safeParse` instead.
+4. **Exogenous** — Network failures, file not found. External conditions you can't prevent. **This is the only category where `catch` is appropriate.**
+
+Most `catch` blocks in production code handle vexing or boneheaded exceptions. The vexing ones should be replaced with Result-returning alternatives. The boneheaded ones should be fixed, not caught. Only exogenous exceptions — things genuinely outside your control — deserve a `catch` block.
+
+When I applied this framework to a codebase I was working on, about 70% of the `try/catch` blocks either (a) caught a validation error that should have been a return value, or (b) caught a bug that should have been fixed upstream. The remaining 30% were legitimate — network calls, file I/O, third-party APIs with undocumented failure modes.
+
+## When `try/catch` is still the right tool
+
+I'm not saying delete every `catch` in your codebase. There are places where `try/catch` is genuinely the best option:
+
+**At the boundary with libraries that throw.** You don't control how `fetch`, `JSON.parse`, or your ORM surfaces errors. Wrap them at the boundary, convert to `Result`, and use typed errors from that point inward:
+
+```ts
+const safeFetch = (url: string): ResultAsync<Response, NetworkError> =>
+  ResultAsync.fromPromise(
+    fetch(url),
+    (e) => new NetworkError(String(e))
+  );
+```
+
+One `try/catch` at the edge. Typed errors everywhere else.
+
+**In top-level error boundaries.** React's `ErrorBoundary`, Express's error middleware, a global `process.on('unhandledRejection')` — these are safety nets. They should exist. They catch the things you didn't anticipate.
+
+**For truly exceptional conditions.** If your database connection drops mid-transaction, the appropriate response might be to throw, let the framework catch it, and return a 500. Not everything needs to be a typed `Result`.
+
+The rule of thumb: **use `try/catch` at the edges, use `Result` in the core.** External world talks to your code through boundaries where exceptions get converted into typed errors. Your domain logic — validation, business rules, data transformation — returns errors as values. The type system covers the part that matters most.
+
+## The pattern across everything I've written
+
+I keep finding the same blind spot in different shapes.
+
+In my [enums article](/blog/why-i-stopped-using-enums-in-typescript), it was TypeScript generating runtime code (IIFEs, reverse mappings) that doesn't match what developers expect. In my [booleans article](/blog/stop-using-booleans-use-union-types), it was the type system allowing impossible states because booleans destroy information. Here, it's function signatures hiding half the truth because TypeScript can't express what a function does when it fails.
+
+The common thread: **TypeScript is at its best when it makes the wrong thing impossible. But with `try/catch`, it can't even see the wrong thing.** The function signature says "returns User." Reality says "returns User or explodes in 15 different ways, and you'll find out which one at 3 AM."
+
+Returning errors as values doesn't add complexity. It moves complexity from runtime to compile time — from "we'll find out in production" to "the compiler told me at 2 PM on a Tuesday." That's a trade I'll take every time.
+
+---
+
+*Anders Hejlsberg was right to reject checked exceptions. Java proved they don't work as a language feature. But the problem they tried to solve — making error paths visible and type-safe — is real. The answer isn't forcing developers to declare exceptions. It's giving them types expressive enough to return errors as values. TypeScript already has those types. We just need to use them.*
+
+*If you liked this, check out [why I stopped using booleans](/blog/stop-using-booleans-use-union-types) — same idea, different blind spot. And if you want to see what happens when you push TypeScript's type system to its absolute limits, my [framework design series](/blog/designed-a-web-framework-with-two-imports) goes there.*
