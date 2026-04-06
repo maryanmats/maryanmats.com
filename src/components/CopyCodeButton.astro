@@ -12,9 +12,14 @@
     const feedback = document.getElementById('copy-feedback');
 
     document.querySelectorAll('pre').forEach((pre) => {
-      if (pre.querySelector('.copy-btn')) {
+      if (pre.parentElement?.classList.contains('code-block')) {
         return;
       }
+
+      const wrapper = document.createElement('div');
+      wrapper.className = 'code-block';
+      pre.parentNode!.insertBefore(wrapper, pre);
+      wrapper.appendChild(pre);
 
       const btn = document.createElement('button');
       btn.className = 'copy-btn';
@@ -39,8 +44,7 @@
         }, 2000);
       });
 
-      pre.style.position = 'relative';
-      pre.appendChild(btn);
+      wrapper.appendChild(btn);
     });
   }
 
@@ -49,6 +53,9 @@
 </script>
 
 <style is:global>
+  .code-block {
+    position: relative;
+  }
   .copy-btn {
     position: absolute;
     top: 8px;
@@ -60,12 +67,13 @@
     color: var(--c-ink-faint);
     cursor: pointer;
     opacity: 0;
+    z-index: 1;
     transition:
       opacity 0.2s,
       color 0.2s,
       border-color 0.2s;
   }
-  pre:hover .copy-btn {
+  .code-block:hover .copy-btn {
     opacity: 1;
   }
   .copy-btn:hover {

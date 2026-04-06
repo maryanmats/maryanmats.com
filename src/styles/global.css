@@ -106,6 +106,7 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 5rem;
+  overflow-x: hidden;
 }
 
 body {
@@ -234,6 +235,8 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.95em;
+  display: block;
+  overflow-x: auto;
 }
 .prose th,
 .prose td {
