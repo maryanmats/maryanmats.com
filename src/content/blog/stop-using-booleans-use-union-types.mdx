@@ -1,0 +1,273 @@
+---
+title: "Stop Using Booleans Everywhere — Use Union Types Instead"
+description: "Three booleans create 8 possible states — most of them impossible. Here's how Boolean Blindness causes real bugs in every language, and why union types eliminate entire categories of bugs."
+pubDate: 2026-04-09T10:00:00
+tags: ["typescript", "javascript", "programming", "clean-code", "union-types", "web-development", "software-engineering", "best-practices"]
+draft: false
+---
+
+I spent four hours debugging a loading spinner.
+
+The UI showed a spinner *and* an error message at the same time. A red banner saying "Something went wrong" floating right next to an animated circle telling the user to wait. The state that caused it:
+
+```ts
+{ isLoading: true, isError: true, data: null }
+```
+
+Three booleans. Eight possible combinations. And somehow, the app landed on the one combination that should never exist. Loading and errored — simultaneously. The fix was a one-liner. But the real fix — the one that would have prevented this bug from ever being *possible* — was not using booleans in the first place.
+
+This isn't a TypeScript thing. This isn't a React thing. This is a *programming* thing. And it has a name.
+
+## The call that broke my brain: `createUser("John", true, false, true)`
+
+Before we talk types, let's talk about the moment booleans become unreadable.
+
+```ts
+createUser("John", true, false, true);
+```
+
+What does this do? Is it `(name, isAdmin, isActive, sendEmail)`? Or `(name, sendEmail, isAdmin, verified)`? You have no idea. I have no idea. The person who wrote this had the docs open. You don't.
+
+This anti-pattern has a name: **the Boolean Trap**. Ariya Hidayat coined it in 2011 after years of API design at Trolltech (the Qt team), and it shows up everywhere:
+
+```js
+widget.repaint(false);        // "don't repaint"? No — repaint without erasing
+menu.stop(true, false);       // jQuery: clearQueue=true, jumpToEnd=false
+slider = new Slider(true);    // true = horizontal. Obviously.
+```
+
+Martin Fowler called these **flag arguments** and wrote an entire refactoring catalog entry to eliminate them. Robert C. Martin put it bluntly in *Clean Code*: "Boolean arguments loudly declare that the function does more than one thing."
+
+The Qt team went further. When they redesigned the API from Qt 3 to Qt 4, they replaced boolean parameters with enums across the board:
+
+```cpp
+// Qt 3 — what does false mean?
+str.replace("%USER%", user, false);
+
+// Qt 4 — self-documenting
+str.replace("%USER%", user, Qt::CaseInsensitive);
+```
+
+That wasn't a cosmetic change. That was an engineering team saying "we shipped an API that caused too many bugs, and the root cause was booleans."
+
+## This bug has a name: Boolean Blindness
+
+In 2011, Robert Harper — professor at Carnegie Mellon — published a blog post that gave this entire class of bugs a name: **Boolean Blindness**. The term was coined by his PhD student Dan Licata during a functional programming course.
+
+The core insight came from Conor McBride (University of Strathclyde), and it's deceptively simple:
+
+> "To make use of a Boolean, you have to know its provenance — so that you can know what it means."
+
+A boolean is a single bit. `true` or `false`. When you evaluate `x === 0` and get `true`, the result carries *zero information* about what was tested. You have to remember where that `true` came from and what it meant. The moment you pass it to another function, you've separated the answer from the question.
+
+Pattern matching preserves the information. Booleans destroy it.
+
+```ts
+// Boolean blindness: the "true" means nothing on its own
+const isEmpty = items.length === 0;
+if (isEmpty) {
+  // you "know" items is empty — but the type system doesn't
+  // nothing stops you from accessing items[0] here
+}
+
+// Pattern matching: information is preserved structurally
+type ItemsState =
+  | { status: "empty" }
+  | { status: "loaded"; items: Item[] };
+
+if (state.status === "empty") {
+  // items doesn't even exist here — impossible to misuse
+}
+```
+
+Harper's argument wasn't aesthetic. It was type-theoretic. A boolean is a *computation result* that happens to correlate with a *proposition*, but it is not the proposition itself. When you branch on a boolean, the type system learns nothing. When you branch on a discriminated union, the type system *narrows*.
+
+That narrowing is the difference between hoping your code is correct and *proving* it.
+
+## The math that should scare you: 2^n impossible states
+
+Here's the arithmetic that convinced me to stop.
+
+Every boolean you add to a state object *doubles* the number of possible states. One boolean: 2 states. Two booleans: 4. Three: 8. Five: 32.
+
+Now count how many of those states are *valid*.
+
+```ts
+// Three booleans
+type State = {
+  isLoading: boolean;
+  isError: boolean;
+  data?: User;
+}
+```
+
+Eight possible combinations. Let's list them:
+
+| `isLoading` | `isError` | `data` | Valid? |
+|---|---|---|---|
+| `false` | `false` | `undefined` | Yes — idle |
+| `true` | `false` | `undefined` | Yes — loading |
+| `false` | `false` | `User` | Yes — success |
+| `false` | `true` | `undefined` | Yes — error |
+| `true` | `true` | `undefined` | **No** — loading AND error? |
+| `true` | `false` | `User` | **No** — loading but has data? |
+| `false` | `true` | `User` | **No** — error but has data? |
+| `true` | `true` | `User` | **No** — everything at once? |
+
+Four valid states. Four impossible states. That's a 50% defect rate in your *type definition*. And nothing in the type system prevents you from creating the impossible ones.
+
+Now here's the same thing with a union type:
+
+```ts
+type State =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "success"; data: User }
+  | { status: "error"; error: Error };
+```
+
+Four states. All valid. You physically cannot construct `{ status: "loading", error: new Error() }` — the type system rejects it. The impossible states don't just "not happen" — they *don't exist*.
+
+Kyle Shevlin calls this principle **"Enumerate, Don't Booleanate."** Richard Feldman demonstrated it at Elm Conf with his talk "Making Impossible States Impossible." Yaron Minsky at Jane Street made it a mantra: **"Make illegal states unrepresentable."**
+
+They all arrived at the same conclusion from different starting points. That should tell you something.
+
+## This isn't a TypeScript thing — every language figured it out
+
+What convinced me this isn't just a frontend trend is that *every* typed language has arrived at the same solution independently.
+
+### Rust: enums are the default
+
+Rust doesn't have a separate "union type" concept. Its `enum` *is* the union type — and it's the idiomatic way to model state:
+
+```rust
+// The Rust community would reject this in code review
+fn rotate_block(&self, block: &mut Block, timed_out: bool)
+self.rotate_block(&mut block, true)?;  // what does true mean?
+
+// Idiomatic Rust
+enum RotateReason { Full, Timeout }
+fn rotate_block(&self, block: &mut Block, reason: RotateReason)
+self.rotate_block(&mut block, RotateReason::Timeout)?;
+```
+
+Rust's linter, Clippy, has a dedicated rule — `fn_params_excessive_bools` — that flags functions with too many boolean parameters. It's not a style preference. It's in the official pedantic lint group.
+
+### Python: keyword-only arguments and linting rules
+
+Python can't enforce union types the same way, but it has a different escape hatch — forcing callers to name their booleans:
+
+```python
+# Bad — what does True mean?
+round_number(3.5, True)
+
+# Python's fix: keyword-only arguments (the * separator)
+def round_number(value: float, *, up: bool) -> float: ...
+round_number(3.5, up=True)  # now it's readable
+```
+
+The Ruff linter (Python's fastest linter, replacing flake8) ships three dedicated rules for boolean traps: **FBT001**, **FBT002**, **FBT003** — flagging boolean type hints, default values, and positional boolean arguments respectively.
+
+### Swift and Kotlin: the language enforces readability
+
+Swift builds argument labels into the language syntax. You *can't* write `createUser("John", true, false)` in Swift — every parameter gets a label at the call site by default:
+
+```swift
+createUser(name: "John", isAdmin: true, sendEmail: false)
+```
+
+Kotlin took the same approach with named parameters and official guidance that says: "Do not use boolean types as arguments. Create a separate function with a descriptive name."
+
+### Even .NET has official guidelines
+
+Microsoft's .NET Framework Design Guidelines state it explicitly:
+
+> "DO use enums if a member would otherwise have two or more Boolean parameters."
+
+And they note that an enum is the *same memory size* as a boolean in .NET (both backed by Int32). There's no performance argument. Only a readability and correctness argument — and booleans lose both.
+
+## The libraries already know this
+
+This isn't theoretical. The most respected libraries in the ecosystem already moved away from booleans.
+
+**TanStack Query** returns a discriminated union. The `status` field (`"pending"`, `"error"`, `"success"`) narrows the entire result type — when you check `status === "success"`, TypeScript knows `data` is `TData`, not `TData | undefined`. The boolean helpers (`isPending`, `isError`, `isSuccess`) exist for convenience, but the architecture is union-first.
+
+**XState** is built entirely on the principle that state is a discriminated union. Not just valid states — valid *transitions*. You can't go from `idle` to `success` without passing through `loading`. The state machine *is* the type.
+
+**React component libraries** universally migrated from boolean props to variant props:
+
+```tsx
+// 2018 — boolean prop soup
+<Button primary danger warning disabled loading>Click</Button>
+// What color is this button? Red? Green? Yellow? All three?
+
+// 2026 — every serious library
+<Button variant="danger" state="loading">Click</Button>
+// Exactly one variant. Exactly one state. No ambiguity.
+```
+
+Chakra UI, Radix, shadcn/ui, Headless UI — they all made the same migration. Not because unions are trendy. Because boolean props created impossible combinations that their users kept hitting.
+
+## The gotcha nobody warns you about
+
+If you're sold on discriminated unions in TypeScript, here's the trap that will bite you on day one. Kyle Shevlin wrote about this, and it's subtle.
+
+**Do not destructure a discriminated union at the top level.** It breaks narrowing.
+
+```ts
+// BAD — TypeScript loses the connection between status and data
+const { status, data, error } = fetchResult;
+if (status === "success") {
+  console.log(data.name);  // Error! data might be undefined
+}
+
+// GOOD — narrow first, then access
+const result = fetchResult;
+if (result.status === "success") {
+  console.log(result.data.name);  // Works — TypeScript narrowed the type
+}
+```
+
+The moment you destructure, `status`, `data`, and `error` become independent variables. TypeScript can no longer reason about their relationship. You need to keep the object intact so that checking `status` narrows the *entire* type.
+
+This is the single most common mistake I see when people adopt discriminated unions. Once you know it, you never hit it again. But the first time? It's confusing.
+
+## When booleans are still fine
+
+I'm not saying booleans are evil. I'm saying they're overused. Here's when they're the right tool:
+
+**Truly binary, independent state.** A checkbox is checked or unchecked. A modal is open or closed. A feature flag is on or off. If the concept is genuinely binary and doesn't combine with other booleans, a single `boolean` is perfectly clear.
+
+```ts
+const [isOpen, setIsOpen] = useState(false);
+```
+
+I'm not going to write `type DialogState = "open" | "closed"` for this. That's over-engineering. The name `isOpen` already communicates the meaning. There's no second boolean to combine with. No impossible state to prevent.
+
+**Fowler's rule of thumb.** Martin Fowler notes that a boolean parameter is acceptable when its value is *derived from context* — not specified by the caller:
+
+```ts
+// Fine — the boolean comes from existing state
+const canEdit = user.role === "admin" && !document.locked;
+
+// Not fine — the boolean is a mystery at the call site
+processDocument(doc, true, false);
+```
+
+**The signal is this:** if you have two or more booleans that interact, or if a boolean appears as a function parameter, or if you're writing `if (isA && !isB && isC)` — stop. You're modeling a state machine with bits. Use a union type. Let the type system do the work.
+
+## The deeper pattern
+
+I keep coming back to the same principle across every article I write. It showed up when I looked inside Zustand and found `useSyncExternalStore`. It showed up when I dropped TypeScript enums for `as const`. It showed up when I realized render props aren't dead.
+
+The principle is this: **the best tools are the ones that make the wrong thing impossible, not just the right thing possible.**
+
+Booleans make the right thing possible. Union types make the wrong thing impossible. That's not a subtle difference. That's the difference between hoping your code works and *knowing* it does.
+
+Three booleans: 8 states, 4 impossible. A union with 4 variants: 4 states, 0 impossible. The math is that simple. The bugs you'll never write — those are the ones that matter most.
+
+---
+
+*Robert Harper wrote about Boolean Blindness in 2011. The Qt team redesigned their entire API to eliminate boolean parameters in 2005. Martin Fowler, Robert C. Martin, and the Rust, Python, Swift, and Kotlin communities all independently arrived at the same conclusion. At some point, when every language and every respected engineer tells you the same thing, maybe it's worth listening.*
+
+*If this resonated, check out [why I stopped using TypeScript enums](/blog/why-i-stopped-using-enums-in-typescript) — same energy, different target. And if you want to see what happens when you push type safety even further, my [three-part series on building a web framework](/blog/designed-a-web-framework-with-two-imports) goes deep into compilers, signals, and the limits of static analysis.*
