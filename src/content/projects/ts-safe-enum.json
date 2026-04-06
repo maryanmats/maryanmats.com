@@ -1,0 +1,9 @@
+{
+  "title": "ts-safe-enum",
+  "description": "A tiny, type-safe alternative to TypeScript enums. Built on plain objects with full inference, type guards, validation, and reverse lookup. No 'as const' needed, no runtime surprises. 536 bytes.",
+  "tech": ["TypeScript", "npm"],
+  "href": "https://www.npmjs.com/package/ts-safe-enum",
+  "status": "Live",
+  "year": "2026",
+  "order": 4
+}

@@ -375,3 +375,7 @@ That's the property I optimize for now. Not cleverness. Not syntax sugar. **Pred
 *I still have `enums.ts` in an old project. I open it sometimes when I'm feeling nostalgic. Forty-seven enums. Some of them have reverse mappings I'm sure nobody has ever called. They compile to about 3 KB of IIFEs that do absolutely nothing useful. I think of it as a monument to good intentions.*
 
 *If you're interested in more TypeScript war stories, check out my deep dive into [why you probably don't need Zustand](/blog/you-dont-need-zustand) — another case of looking under the hood and finding something simpler.*
+
+---
+
+**Update:** I packaged the `as const` + union type pattern into [`ts-safe-enum`](https://www.npmjs.com/package/ts-safe-enum) — a 536-byte `defineEnum()` function with full type inference, type guards, validation, and reverse lookup. No `as const` needed, no runtime surprises.
