@@ -324,3 +324,7 @@ Returning errors as values doesn't add complexity. It moves complexity from runt
 *Anders Hejlsberg was right to reject checked exceptions. Java proved they don't work as a language feature. But the problem they tried to solve — making error paths visible and type-safe — is real. The answer isn't forcing developers to declare exceptions. It's giving them types expressive enough to return errors as values. TypeScript already has those types. We just need to use them.*
 
 *If you liked this, check out [why I stopped using booleans](/blog/stop-using-booleans-use-union-types) — same idea, different blind spot. And if you want to see what happens when you push TypeScript's type system to its absolute limits, my [framework design series](/blog/designed-a-web-framework-with-two-imports) goes there.*
+
+---
+
+**Update:** I packaged these patterns into [`ts-safe-result`](https://www.npmjs.com/package/ts-safe-result) — a tiny (< 1KB), zero-dependency `Result<Value, Error>` type for TypeScript with `ok`, `err`, `map`, `flatMap`, `match`, `tryCatch`, `tryAsync`, and more. If you want to start using typed errors in your codebase today, it's ready to go.

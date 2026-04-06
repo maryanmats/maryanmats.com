@@ -1,0 +1,9 @@
+{
+  "title": "ts-safe-result",
+  "description": "A tiny, type-safe Result<Value, Error> type for TypeScript. Handle errors as values, not exceptions. Zero dependencies, under 1KB, fully tree-shakable. Features ok/err constructors, map, flatMap, match, tap, tryCatch, tryAsync, and more.",
+  "tech": ["TypeScript", "npm"],
+  "href": "https://www.npmjs.com/package/ts-safe-result",
+  "status": "Live",
+  "year": "2026",
+  "order": 3
+}
