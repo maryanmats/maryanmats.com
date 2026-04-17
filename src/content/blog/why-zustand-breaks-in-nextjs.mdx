@@ -1,0 +1,454 @@
+---
+title: "Why Zustand Breaks in Next.js — And What the Fix Actually Is"
+description: "Hydration mismatches, persist bugs, and leaked state aren't Zustand bugs. They're the natural result of using a client-only pattern inside a server-rendered framework. Here's the mental model I use and the setup I actually ship."
+pubDate: 2026-04-17T10:00:00
+tags: ["react", "nextjs", "zustand", "typescript", "ssr", "hydration", "state-management"]
+draft: false
+---
+
+I've watched the same conversation play out a dozen times now.
+
+Someone builds a nice little Zustand store in a pure React project. Tiny API, no providers, no ceremony. Feels amazing. Then they port the exact same pattern into Next.js App Router, slap `persist` on it, refresh the page, and React throws this:
+
+> Hydration failed because the server rendered HTML didn't match the client.
+
+Cue the blog posts. "Zustand doesn't work with SSR." "Next.js hates client state." "App Router is cursed." "Just add `ssr: false` everywhere."
+
+None of that is true.
+
+What's actually happening is boring: you took a tool designed to manage **state in the browser** and asked a framework that **renders on the server first** to pretend your browser state already existed when there was no browser. Sometimes that's harmless. Sometimes it's catastrophic. The whole point of this article is understanding which is which — and building the architecture that makes the distinction obvious.
+
+If you read my previous article, [You Don't Need Zustand: useSyncExternalStore Is All You Need](/blog/you-dont-need-zustand), this is the missing second half. That one explained *why* Zustand works. This one explains why the same pattern goes sideways the moment you cross into Next.js.
+
+## The misconception that causes half of these bugs
+
+Most of the pain starts with one wrong mental model:
+
+> "A Client Component only runs in the browser."
+
+It doesn't. A Client Component is a component that *can* use state, effects, and browser APIs. It is still part of the server-rendered HTML on the initial page load. Next.js prerenders it on the server, ships the HTML, and then the client **hydrates** that HTML and makes it interactive.
+
+The practical rule:
+
+- The server produces an initial snapshot of the tree.
+- The client hydrates that snapshot.
+- For that hydration to succeed, the **first client render** must match the **server render** exactly.
+
+That constraint is what makes code like this dangerous:
+
+```tsx
+'use client'
+
+export function ThemeLabel() {
+  const theme = localStorage.getItem('theme') ?? 'light'
+  return <span>{theme}</span>
+}
+```
+
+It has `'use client'`, so developers assume it's safe. It isn't. On the server there is no `localStorage`, so this throws. And even if you guard it with a `typeof window` check, the server will render `'light'` and the browser — already holding `'dark'` in storage — will render `'dark'` on its first pass. React compares the two, sees different text, and yells at you.
+
+`'use client'` does not exempt a component from producing a stable first render. Nothing does.
+
+## Zustand is still an external store, and React has rules for those
+
+Zustand feels deeply React-y, but it isn't stored in React's fiber tree. It's an external store — module state with a subscribe function. React's official integration for external stores is `useSyncExternalStore`, which Zustand uses under the hood. The signature Zustand relies on looks roughly like this:
+
+```ts
+const slice = React.useSyncExternalStore(
+  api.subscribe,
+  () => selector(api.getState()),
+  () => selector(api.getInitialState()),
+)
+```
+
+That third argument — the server snapshot — is the entire story for SSR. React uses it on the server and during the first client render. If the value your store is reporting during hydration has already moved past the initial snapshot, React is correct to complain.
+
+Once you really internalize this, the supposedly random SSR bugs stop feeling random. They're the type system working as intended.
+
+## Three different bugs, constantly confused with each other
+
+When people say "Zustand breaks in Next.js," they are almost always talking about one of three problems. They need different fixes, and if you don't name them separately, every fix starts looking like superstition.
+
+### 1. Hydration mismatch
+
+The server rendered one value, the first client render produced another. Classic flow:
+
+- Server renders `theme = 'light'` (from the default).
+- Browser already has `'dark'` in `localStorage`.
+- Zustand's `persist` reads `'dark'` synchronously on init.
+- The first client render uses `'dark'`.
+- React compares trees and screams.
+
+This is not a Zustand bug. React is doing its job: noticing that the HTML it's about to hydrate doesn't match what the component now wants to render.
+
+### 2. Persist hydration timing
+
+`persist` behaves differently depending on the storage engine. `localStorage` is synchronous, so `persist` can hydrate before your first render. `AsyncStorage`, IndexedDB-based adapters, and custom async storages hydrate *after* mount. One causes hydration mismatches when the persisted value changes the output. The other causes the classic "logged-out flicker" where the UI briefly renders a default before the real state arrives.
+
+Same middleware. Different failure mode. Different fix.
+
+### 3. Shared state across requests
+
+This is the ugliest one, and it's not a hydration issue at all.
+
+In Next.js, the Node.js process is long-lived. A module-scoped Zustand store created with `create(...)` at import time is **one instance** shared across every request that process handles. On the client that's fine — one browser, one user, one store. On the server, two different users hitting the page at the same time get the same store. User A's cart can bleed into User B's server render. No React error will tell you about it; you'll just ship a bug.
+
+This is exactly why [the official Zustand docs' Next.js guide](https://zustand.docs.pmnd.rs/guides/nextjs) stops using `create` and switches to `createStore` + a React Context provider for any store that holds request-specific data.
+
+## The real decision: where does this piece of state actually live?
+
+Once you stop lumping everything into "Zustand state" and start asking where each piece of state belongs, the fixes fall out naturally. I split state into three buckets:
+
+**Request-derived state.** Anything tied to a specific user or request: auth session, cart, locale, feature flags, AB variant, anything coming from cookies, headers, or the database. The **server** is the source of truth. The client should receive the initial value, not guess it.
+
+**Browser-only state.** Values that don't matter to the server and don't need to affect the first HTML: collapsed sidebar, dismissed banners, "don't show this tip again" flags, local-only filters. The **browser** is the source of truth. The server should render a stable default and let the real value apply after hydration.
+
+**First-paint visual state.** The tricky category. Theme is the canonical example. If the value affects the `<html>` class, visible text, or layout on first paint, it behaves like request state — even though historically we shoved it in `localStorage`. For this, `localStorage` alone is the wrong source of truth, because the server literally cannot read it. A cookie (or a server-readable user preference) is.
+
+Three buckets, three sources of truth, three different patterns. That's the whole design.
+
+## Pattern 1: request-scoped stores via a vanilla store factory
+
+For anything request-specific, stop using `create`. Use `createStore` from `zustand/vanilla` to build a factory, then instantiate it once per render tree inside a provider. This is the pattern Zustand itself recommends for Next.js.
+
+```ts
+// src/stores/cart-store.ts
+import { createStore } from 'zustand/vanilla'
+
+export type CartItem = { id: string; quantity: number }
+export type CartState = { items: CartItem[] }
+export type CartActions = {
+  addItem: (item: CartItem) => void
+  clearCart: () => void
+}
+export type CartStore = CartState & CartActions
+
+export const defaultCartState: CartState = { items: [] }
+
+export function createCartStore(initial: CartState = defaultCartState) {
+  return createStore<CartStore>()((set) => ({
+    ...initial,
+    addItem: (item) =>
+      set((state) => ({ items: [...state.items, item] })),
+    clearCart: () => set({ items: [] }),
+  }))
+}
+```
+
+No React bindings yet. That's the point — `createStore` is the vanilla primitive; `create` is just `createStore` plus the hook. By using the vanilla version, we control when and where the instance is created.
+
+Now the provider:
+
+```tsx
+// src/providers/cart-store-provider.tsx
+'use client'
+
+import {
+  createContext,
+  useContext,
+  useRef,
+  type ReactNode,
+} from 'react'
+import { useStore } from 'zustand'
+import {
+  createCartStore,
+  type CartState,
+  type CartStore,
+} from '@/stores/cart-store'
+
+type CartStoreApi = ReturnType<typeof createCartStore>
+
+const CartStoreContext = createContext<CartStoreApi | null>(null)
+
+export function CartStoreProvider({
+  children,
+  initialState,
+}: {
+  children: ReactNode
+  initialState: CartState
+}) {
+  const storeRef = useRef<CartStoreApi | null>(null)
+  if (storeRef.current === null) {
+    storeRef.current = createCartStore(initialState)
+  }
+
+  return (
+    <CartStoreContext.Provider value={storeRef.current}>
+      {children}
+    </CartStoreContext.Provider>
+  )
+}
+
+export function useCartStore<T>(selector: (state: CartStore) => T): T {
+  const ctx = useContext(CartStoreContext)
+  if (!ctx) throw new Error('useCartStore must be used inside CartStoreProvider')
+  return useStore(ctx, selector)
+}
+```
+
+The `useRef` + null check is the trick. It guarantees exactly one store per mounted provider, created lazily. Each request gets its own tree, its own provider instance, its own store.
+
+Then a Server Component fills in the initial state:
+
+```tsx
+// app/cart/page.tsx
+import { cookies } from 'next/headers'
+import { CartStoreProvider } from '@/providers/cart-store-provider'
+import { CartPage } from '@/components/cart-page'
+
+export default async function Page() {
+  const cookieStore = await cookies()
+  const raw = cookieStore.get('cart')?.value
+  const initialState = { items: raw ? JSON.parse(raw) : [] }
+
+  return (
+    <CartStoreProvider initialState={initialState}>
+      <CartPage />
+    </CartStoreProvider>
+  )
+}
+```
+
+Two details worth naming:
+
+- `await cookies()` — in Next.js 15+, `cookies()`, `headers()`, and `draftMode()` are async. It's a one-line change that trips people up if they haven't upgraded recently.
+- The server decides the cart. The client hydrates from that exact value. Hydration matches. User A's cart never touches User B's render. Done.
+
+This is the pattern I use for literally every piece of state that belongs to the request.
+
+## Pattern 2: if it affects first paint, make it server-readable
+
+Theme is the textbook case. If you want the first HTML to already be in dark mode, the server has to know the preference at render time. `localStorage` does not exist on the server, so it cannot.
+
+So stop fighting it. Store the preference in a cookie.
+
+```tsx
+// app/layout.tsx
+import { cookies } from 'next/headers'
+
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const cookieStore = await cookies()
+  const theme =
+    cookieStore.get('theme')?.value === 'dark' ? 'dark' : 'light'
+
+  return (
+    <html lang="en" className={theme}>
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+The server renders the correct class. The client hydrates with the same class. No flash, no mismatch, no "why is dark mode impossible in App Router" post. If you still want a Zustand store on the client to manage theme reactively, that's fine — just initialize it from the same cookie value, and write the cookie when the user toggles.
+
+This is also why `next-themes` injects an inline script in `<head>` that reads `localStorage` before React hydrates. Same problem, different solution. Both work. The cookie version is simpler if you already have a server.
+
+## Pattern 3: for actual browser-only state, use `persist` but keep it out of SSR
+
+There's still a legitimate place for `persist` with `localStorage`: the state that truly does not belong on the server. Collapsed sidebar. "Don't show this again" flags. Recently-used filters. UI memory.
+
+For these, you want two things:
+
+1. The server should render a stable default (the one baked into the store).
+2. The persisted browser value should apply *after* hydration, not during it.
+
+Zustand ships exactly this with `skipHydration` and a manual `rehydrate()` call:
+
+```ts
+// src/stores/preferences-store.ts
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+type PreferencesStore = {
+  sidebarCollapsed: boolean
+  hasHydrated: boolean
+  setSidebarCollapsed: (value: boolean) => void
+  setHasHydrated: (value: boolean) => void
+}
+
+export const usePreferencesStore = create<PreferencesStore>()(
+  persist(
+    (set) => ({
+      sidebarCollapsed: false,
+      hasHydrated: false,
+      setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
+      setHasHydrated: (v) => set({ hasHydrated: v }),
+    }),
+    {
+      name: 'preferences-store',
+      skipHydration: true,
+      onRehydrateStorage: () => (state, error) => {
+        if (!error) state?.setHasHydrated(true)
+      },
+    },
+  ),
+)
+```
+
+Note that I'm using `create` here, not the factory pattern. These preferences are genuinely global to the user's browser — they don't vary per request, there's no server-rendered version to leak, and on the server every request renders the same default. Module-level is fine.
+
+Then rehydrate explicitly after mount:
+
+```tsx
+// src/components/preferences-hydrator.tsx
+'use client'
+
+import { useEffect } from 'react'
+import { usePreferencesStore } from '@/stores/preferences-store'
+
+export function PreferencesHydrator() {
+  useEffect(() => {
+    void usePreferencesStore.persist.rehydrate()
+  }, [])
+  return null
+}
+```
+
+And gate any UI that visibly depends on the persisted value:
+
+```tsx
+// src/components/sidebar-toggle.tsx
+'use client'
+
+import { usePreferencesStore } from '@/stores/preferences-store'
+
+export function SidebarToggle() {
+  const hasHydrated = usePreferencesStore((s) => s.hasHydrated)
+  const collapsed = usePreferencesStore((s) => s.sidebarCollapsed)
+  const setCollapsed = usePreferencesStore((s) => s.setSidebarCollapsed)
+
+  if (!hasHydrated) return null
+
+  return (
+    <button onClick={() => setCollapsed(!collapsed)}>
+      {collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+    </button>
+  )
+}
+```
+
+The sequence is:
+
+1. Server renders the component with the store's default. If the visible output depends on the persisted value, we return `null` during SSR and the first client render. Stable HTML on both sides.
+2. After mount, `rehydrate()` runs. The persisted value loads. `hasHydrated` flips true.
+3. The component re-renders with the real value. No mismatch — we're past hydration.
+
+This isn't a hack. It's the store saying out loud: "this value is browser-only; SSR shouldn't see it."
+
+## What about the classic `useEffect` + `mounted` fix?
+
+You've seen this one:
+
+```tsx
+'use client'
+
+import { useEffect, useState } from 'react'
+import { usePreferencesStore } from '@/stores/preferences-store'
+
+export function SidebarLabel() {
+  const collapsed = usePreferencesStore((s) => s.sidebarCollapsed)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
+
+  return <span>{collapsed ? 'Collapsed' : 'Expanded'}</span>
+}
+
+```
+
+It works. But only for one specific problem: "I have a browser-only value and I don't want it to affect the server render." For that case, fine — it's a smaller, scoped version of the `hasHydrated` pattern above.
+
+What it **doesn't** solve:
+
+- Request-scope leakage (module-global store on the server).
+- First-paint correctness (theme flashing to the wrong color).
+- Actual request-derived data that the server should have known.
+- Using the wrong source of truth in the first place.
+
+People use `mounted` as a catch-all and wonder why the bugs keep coming back with new shapes. It's a valid tool for one narrow problem. Use it there, not everywhere.
+
+## Server Components are not store consumers
+
+One more boundary worth stating explicitly: Zustand stores belong on the client runtime. Server Components should not import them, read from them, or try to write to them. Server Components are for data fetching, reading cookies and headers, talking to the database, and producing the initial state that you then hand to a client-side provider.
+
+The pipeline:
+
+- **Server Component** → fetches/reads whatever the request needs, builds `initialState`.
+- **Client provider** → receives `initialState`, creates the store instance once per tree.
+- **Client components** → read and mutate the store via the provider's hook.
+
+Keep those layers separate and the whole thing stays boring, which is exactly what you want.
+
+## Mistakes I keep seeing in real codebases
+
+**Storing request data in a module-global `create(...)` store.** Works in a pure SPA. In Next.js it's a shared-state bug waiting for concurrent traffic to expose it.
+
+**Using `localStorage` for first-paint values.** If the HTML depends on the value, the server has to be able to read it. Use a cookie.
+
+**Using `persist` for everything.** `persist` is for browser memory, not for request initialization. It is not a substitute for fetching data on the server.
+
+**Reaching for `ssr: false` as the first fix.** Sometimes a truly client-only component genuinely belongs behind dynamic import. But if your architecture is wrong, turning off SSR for a subtree just hides the bug — it doesn't fix it, and you pay for it in lost prerendering.
+
+**Rendering unstable values during hydration.** Not specific to Zustand. `Date.now()`, `Math.random()`, locale-sensitive formatting, anything that reads browser APIs — all of it creates the same mismatch. Zustand just makes it louder because an external store amplifies the problem across every subscriber.
+
+## The short mental model
+
+When I plan where a new piece of state lives, I ask four questions in order:
+
+1. Does this state depend on **the request** (user, session, cookies, DB)? If yes → request-scoped store, initialized from the server.
+2. Does it affect the **first HTML**? If yes → the server must be able to read it. Usually a cookie.
+3. Is it **browser-only** and it's fine for the server to render a default? If yes → `persist` with `skipHydration` and a `hasHydrated` gate.
+4. Would the same store instance be reused across different users on the server? If yes → you have a bug; back to question 1.
+
+That's the whole decision tree. It fits on a napkin, and it fixes nearly every "Zustand + Next.js" problem I've debugged.
+
+## FAQ
+
+### Is Zustand compatible with Next.js?
+
+Yes. But "compatible" doesn't mean you can copy-paste the pure-SPA pattern. Anything request-scoped needs the vanilla-store + provider pattern from the official docs.
+
+### Why does `persist` throw hydration errors?
+
+Because it restores a browser value (from `localStorage`) synchronously during init, and that value can differ from what the server rendered. If the visible output changes on the first client render, React flags the mismatch. Either `skipHydration` + gate the UI, or move the source of truth to a cookie so the server can participate.
+
+### Should I just disable SSR for components that use Zustand?
+
+Only if the subtree is genuinely client-only and you're okay losing prerendering. It's a valid escape hatch, but it's rarely the right first move.
+
+### Can I put the auth token in Zustand with `persist` and read it during render?
+
+Please don't. Beyond the security questions around `localStorage`, anything that drives rendering decisions and lives in browser storage is exactly the recipe for hydration flicker. Auth belongs in a cookie (ideally httpOnly), read on the server.
+
+### Is `skipHydration` always the answer?
+
+No. It's the right answer when a persisted browser value should not affect the server-rendered HTML. It does nothing for request-scope leakage, first-paint correctness, or using the wrong source of truth.
+
+## Closing
+
+Zustand doesn't break in Next.js. What breaks is the assumption that one piece of state can simultaneously be:
+
+- request-local,
+- server-readable,
+- browser-persisted,
+- hydration-safe,
+- globally shared,
+- and first-paint correct.
+
+It can't. You pick. Once you pick deliberately — per store, per value — the setup becomes almost anticlimactic:
+
+- Request-scoped stores for request data, built with `createStore` and a provider.
+- Cookies or server-readable sources for anything that drives first paint.
+- `persist` for real browser-only state, gated with `skipHydration` and a `hasHydrated` flag.
+- Server Components stay on their side of the boundary and hand down initial state.
+
+None of this is clever. It just matches the rendering model instead of fighting it. And once the architecture matches the model, Zustand in Next.js stops being a source of hydration horror stories and goes back to being the small, delightful library it is on the client.
+
+---
+
+*If this helped, you might also like [You Don't Need Zustand](/blog/you-dont-need-zustand) — the deep dive into `useSyncExternalStore` that explains why Zustand works the way it does in the first place. Or [Stop Writing try/catch in TypeScript](/blog/stop-writing-try-catch-in-typescript) if you want another post about making invisible failure modes visible.*
