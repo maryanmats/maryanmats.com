@@ -1,0 +1,286 @@
+---
+title: "Why `.length` Is Wrong for Strings in JavaScript — and How Intl.Segmenter Fixes It"
+description: "JavaScript's .length, .split(''), and [...str] return three different lengths for the same string — and for any text with emoji, accents, or non-Latin scripts, all three are wrong for users. Intl.Segmenter, now in every browser, splits strings the way humans actually read them."
+pubDate: 2026-05-09T10:00:00
+tags: ["javascript", "unicode", "strings", "internationalization", "intl-segmenter", "web-development"]
+draft: false
+---
+
+I've shipped this bug. So has nearly every JavaScript developer who has ever built a form.
+
+Open your browser console — yes, right now — and try this:
+
+```js
+'👨‍👩‍👧'.length;
+```
+
+You'll get **8**.
+
+The string is one visible character. One family emoji. One glyph on the screen, one cell of width when it renders. JavaScript reports eight.
+
+If you've ever built a `maxlength="280"` input, a server-side validator that counted symbols, a substring truncation with an ellipsis, or a search-result highlighter — you've shipped this bug too. You probably never saw it, because nobody on your team had an emoji in their name. The first user who does will hit it instantly.
+
+The bug isn't really yours. It's baked into how JavaScript measures strings — and it's finally fixable in a way it wasn't five years ago. The rest of this post is about why JavaScript reports eight, why the obvious "fix" reports five and is *also* wrong for what you actually meant, and what to do instead.
+
+## JavaScript has three different answers, and most of them are wrong
+
+When you ask JavaScript "how long is this string", you can get three different numbers depending on which API you reach for. Each one is technically correct about something — and almost never correct about what *you* meant.
+
+### Layer 1: code units (`.length`, `s[i]`, `.charAt`)
+
+This is the oldest layer. JavaScript stores strings internally as a sequence of 16-bit chunks called **UTF-16 code units**. `.length` returns the count of those chunks. `s[0]` returns the first chunk as a string. `s.charAt(0)` does the same.
+
+```js
+const s = '👨‍👩‍👧';
+s.length;     // 8
+s[0];         // '\uD83D' — half of the man emoji
+s.charAt(1);  // '\uDC68' — the other half
+```
+
+That `s[0]` is genuinely a broken character — a *high surrogate* — not a usable string on its own. JavaScript has no problem handing it to you anyway.
+
+The reason is historical. JavaScript was designed in 1995, when Unicode still fit in 16 bits. By the time Unicode grew past the 16-bit ceiling — adding emoji, historical scripts, lots of CJK — JavaScript was already deployed everywhere. Changing the meaning of `.length` would break the web. So `.length` still counts the encoding chunks, even though the encoding leaks every time a character needs more than 16 bits.
+
+Anything above U+FFFF — the entire emoji range, plus a lot of CJK and ancient scripts — needs **two** UTF-16 code units called a *surrogate pair*. The man emoji `👨` is one such character: one user-visible thing, two code units in the engine, two slots in `.length`.
+
+### Layer 2: code points (`[...str]`, `for...of`, `codePointAt`)
+
+ES2015 added string iteration that respects surrogate pairs. Spreading a string, looping with `for...of`, and `codePointAt` all work at the **code point** level — actual Unicode characters, not encoding chunks.
+
+```js
+const family = '👨‍👩‍👧';
+
+[...family];          // ['👨', '‍', '👩', '‍', '👧']
+[...family].length;   // 5
+```
+
+Better. The man, the woman, and the girl are now intact. But we got 5, not 1. Where do the extra two come from?
+
+They're `'‍'` — the **Zero Width Joiner** (ZWJ). The family emoji isn't a single character at all. It's a sequence: `👨` + ZWJ + `👩` + ZWJ + `👧`. Three people stitched together with two invisible joiners. To Unicode, those are five separate code points. To the rendering engine and to the user, it's one face.
+
+This is also true for skin tone modifiers, the increasingly elaborate occupation emojis (👩‍🚀, 🧑‍🍳), couple-and-heart emojis, and country flags (each flag is two *regional indicator* code points).
+
+So code points are closer to "characters", but still not what users mean.
+
+### Layer 3: grapheme clusters
+
+A **grapheme cluster** is one user-perceived character — one thing you'd point at on a screen and call "a letter". The family emoji is one grapheme cluster. The Spanish `é` written in decomposed form (`e` + combining acute accent — two code points) is also one. A Korean Hangul syllable like `안` is one. A Devanagari conjunct is one. A flag is one.
+
+Until recently, JavaScript had no built-in way to count or iterate at this level. You needed `grapheme-splitter` or `graphemer` from npm, both with thousands of weekly downloads precisely because the platform didn't ship a solution.
+
+Now it does. The API is called `Intl.Segmenter`.
+
+| What you're counting | `'👨‍👩‍👧'` | `'café'` (NFD) | What it's good for |
+|---|---|---|---|
+| UTF-16 code units (`.length`) | 8 | 5 | Storage size, network bytes, low-level algorithms |
+| Code points (`[...str].length`) | 5 | 5 | Working with Unicode at the character level |
+| Grapheme clusters (`Intl.Segmenter`) | 1 | 1 | Anything a human will read or count |
+
+Three layers. Each measures a real thing. The mistake is using one when you want another — and `.length`, the most reachable one, is almost never the one you want for users.
+
+## Meet Intl.Segmenter
+
+`Intl.Segmenter` shipped in Chrome 87 (late 2020), Safari 14.1 (2021), and finally Firefox 125 (April 2024). Today it works in every browser people actually use, in modern Node.js, in Bun, and in Deno. No polyfill. No dependency. No version pinning.
+
+The simplest possible use:
+
+```js
+const segmenter = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+for (const { segment } of segmenter.segment('👨‍👩‍👧 family')) {
+  console.log(segment);
+}
+// 👨‍👩‍👧
+//  
+// f
+// a
+// m
+// i
+// l
+// y
+```
+
+Eight grapheme clusters. The family is one segment. JavaScript finally agrees with your eyes.
+
+A few things worth knowing about the API:
+
+- The first argument is a **locale**. For pure grapheme segmentation it rarely matters. For words and sentences it matters a lot — Thai segments words differently from English, Japanese needs a dictionary to know where word boundaries are.
+- `granularity` is `'grapheme'`, `'word'`, or `'sentence'`. Most of the time you only need grapheme.
+- `segment()` returns an iterable of `{ segment, index, input }` objects (with an extra `isWordLike` for word granularity). The `index` is the position in code units in the original string — useful when you need to slice the original.
+- Segmenters are reusable and *should* be reused. Construct once at module level, use everywhere. More on why below.
+
+That's the whole surface. Three granularities, an iterator, no flags.
+
+## The recipes I actually use
+
+Throughout this section I'm assuming there's a singleton at module scope:
+
+```js
+const graphemeSeg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+```
+
+### Counting the way users count
+
+```js
+function userPerceivedLength(str) {
+  return [...graphemeSeg.segment(str)].length;
+}
+
+userPerceivedLength('👨‍👩‍👧');           // 1
+userPerceivedLength('café');              // 4 (NFC or NFD, same answer)
+userPerceivedLength('안녕하세요');          // 5
+userPerceivedLength('🇺🇦🇯🇵');             // 2 (two flags, each one grapheme)
+userPerceivedLength('hello 👍🏽');         // 7
+```
+
+This is the function your character counter actually wanted. Use it instead of `.length` for anything user-facing: input maxlengths, "you have X characters left" indicators, summary truncation thresholds, tweet-style budgets.
+
+### Truncating without slicing through a character
+
+The classic bug: `str.slice(0, 50) + '…'` cuts a multi-byte sequence in half and you end up with a question-mark box at the boundary. The fix:
+
+```js
+function truncate(str, max, suffix = '…') {
+  const segments = [...graphemeSeg.segment(str)];
+  if (segments.length <= max) return str;
+  return segments.slice(0, max).map(s => s.segment).join('') + suffix;
+}
+
+truncate('Hi 👨‍👩‍👧 friends', 5);  // 'Hi 👨‍👩‍👧 …'
+```
+
+Five graphemes in, the family emoji is intact, the suffix attaches cleanly.
+
+### Reversing for real
+
+The interview-classic `str.split('').reverse().join('')` is one of the most popular ways to destroy a string in JavaScript. It splits on UTF-16 code units, so every emoji and every flag and every accented character that crosses the surrogate boundary explodes.
+
+```js
+function reverse(str) {
+  return [...graphemeSeg.segment(str)].reverse().map(s => s.segment).join('');
+}
+
+reverse('café 👨‍👩‍👧');  // '👨‍👩‍👧 éfac'
+```
+
+Nothing exploded.
+
+### Taking the first N "characters"
+
+For initials, monogram avatars, abbreviated names:
+
+```js
+function take(str, n) {
+  let out = '';
+  let i = 0;
+  for (const { segment } of graphemeSeg.segment(str)) {
+    if (i++ >= n) break;
+    out += segment;
+  }
+  return out;
+}
+
+take('🇺🇦Maryan', 1);   // '🇺🇦' — flag intact
+take('Émilie', 1);       // 'É' — even with combining accent
+```
+
+For initials specifically, this is the difference between an avatar for Émilie that shows `É` and one that shows a bare `E` with an orphaned diacritic floating next to it.
+
+## Beyond graphemes: words and sentences
+
+The grapheme stuff alone justifies the API. But the other two granularities solve a separate problem you might not realize JavaScript has — splitting text in languages without spaces.
+
+### Word segmentation
+
+```js
+const wordSeg = new Intl.Segmenter('en', { granularity: 'word' });
+
+const result = [...wordSeg.segment("It's not magic — it's just Unicode.")];
+
+for (const w of result) {
+  if (w.isWordLike) console.log(w.segment);
+}
+// "It's"
+// "not"
+// "magic"
+// "it's"
+// "just"
+// "Unicode"
+```
+
+Notice `isWordLike`. The segmenter returns *every* segment — words, punctuation, whitespace — and tells you which ones are real words. That's how you write a word counter that doesn't count `—` or `.` as words. It also keeps `It's` together correctly, which is the kind of thing a naive `split(/\s+/)` will half-handle and a regex will get mostly-but-not-quite right.
+
+Now the demo that justifies the existence of this whole API:
+
+```js
+const ja = new Intl.Segmenter('ja', { granularity: 'word' });
+
+const text = '東京特許許可局';
+[...ja.segment(text)].filter(s => s.isWordLike).map(s => s.segment);
+// ['東京', '特許', '許可', '局']
+```
+
+That string ("Tokyo Patent Approval Bureau") has no spaces. `text.split(' ')` returns an array with one element. The Japanese-locale segmenter knows where the morphological boundaries are because the engine ships with a Japanese dictionary.
+
+This is the part of the API that makes search highlighting, autocomplete tokenization, and reading-time estimation work *correctly across languages* — not just in English with a coat of paint. Without it, you ship something that "works" for Latin scripts and silently breaks for Chinese, Japanese, Thai, Khmer, and Lao users.
+
+### Sentence segmentation
+
+```js
+const sentSeg = new Intl.Segmenter('en', { granularity: 'sentence' });
+
+[...sentSeg.segment('First sentence. Second one! And a third?')]
+  .map(s => s.segment.trim());
+// ['First sentence.', 'Second one!', 'And a third?']
+```
+
+This is harder than it looks. A naive `split('. ')` falls apart on `Mr. Smith`, `e.g.`, `3.14`, and any string ending without a trailing space. The Unicode sentence-break algorithm handles most of these. It's not magic — abbreviations are locale-specific and the algorithm isn't perfect — but it's significantly better than anything you'd write by hand in an afternoon.
+
+## A note on performance
+
+Two things are worth knowing.
+
+**Construction has a real cost.** Building a `new Intl.Segmenter(...)` triggers locale data loading. Don't do it inside a render function or a per-keystroke handler. Hoist it to module scope and reuse it everywhere.
+
+```js
+// Bad — new segmenter on every render
+function CharCount({ value }) {
+  const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const len = [...seg.segment(value)].length;
+  return <span>{len}/280</span>;
+}
+
+// Good — one segmenter for the whole module
+const graphemeSeg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+
+function CharCount({ value }) {
+  const len = [...graphemeSeg.segment(value)].length;
+  return <span>{len}/280</span>;
+}
+```
+
+**Segmentation itself is not free either.** For a 10-character input it's invisible. For a 100 KB document on every keystroke it's measurable. If you're segmenting a long-form editor, debounce, segment only the changed range, or fall back to `[...str].length` (code points — usually a close-enough approximation that's much faster).
+
+For a normal `<input>` with a maxlength of a few hundred, run the segmenter on every keystroke without thinking about it. The cost is microseconds.
+
+## When `.length` is actually the right answer
+
+This whole post argues against `.length` for user-facing string measurement. There are still cases where `.length` is exactly right — they're just narrower than most code treats them as.
+
+`.length` measures storage. If you care about how many bytes a string takes in memory, in a network payload, or in a database column, `.length × 2` (for UTF-16) or `new TextEncoder().encode(str).byteLength` (for UTF-8) is the right answer. A `VARCHAR(280)` column is measured in characters or bytes depending on the database — never in graphemes — so there's no clean mapping between what your DB will accept and what your character counter shows.
+
+`.length` is also the right tool for low-level string algorithms: regex engine internals, parsers, hashing, anything that operates on the encoding rather than the perceived content.
+
+The distinction comes down to who's counting. If a *human* will read the result, you want graphemes. If a *machine* will store or transmit it, you want code units or bytes. The reason character counters feel so consistently broken is that the field they're measuring against is a UI element a human reads — but the API they reach for measures bytes.
+
+The old SMS limit is the cleanest illustration. 160 GSM-7 characters of SMS budget, dropping to 70 the moment you include any emoji because the encoding switches to UCS-2. That's a transport-layer count, not a user-perceived one — which is why "you have 70 characters left" feels strange the moment a single emoji halves your space. The carrier isn't being arbitrary; it's measuring a real thing. Just not the thing the user is looking at.
+
+## Try it now
+
+Open the console of whatever browser you're reading this in. Type:
+
+```js
+new Intl.Segmenter('en', { granularity: 'grapheme' });
+```
+
+If that returns an object, you have the fix. Pick one input field in something you've shipped — anything with a character counter, a truncation, a substring — and audit it. There's a very good chance the counter is wrong, the truncation slices through a multi-byte character on the right text, or both.
