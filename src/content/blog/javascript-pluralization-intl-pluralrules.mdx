@@ -1,0 +1,182 @@
+---
+title: "Your `+ 's'` Only Speaks English — Pluralize with Intl.PluralRules"
+description: "JavaScript's + 's' plural hack only speaks English. Intl.PluralRules handles the three, four, or six plural forms other languages actually need."
+pubDate: 2026-06-08T10:00:00
+tags: ["javascript", "i18n", "internationalization", "intl-pluralrules", "pluralization", "web-development"]
+draft: false
+---
+
+You've written this line. Probably this week:
+
+```js
+`${count} item${count === 1 ? '' : 's'}`
+```
+
+It's so automatic you don't think of it as code. It's punctuation. And in English it's correct — one item, two items, zero items. Ship it.
+
+The problem is that it isn't a string utility. It's a grammar engine — a tiny one, with exactly two settings — and the grammar it hardcodes is English. The moment a translator touches your app, that line starts producing text that, to a native speaker of almost any other language, reads like it was assembled by a broken script. Because it was.
+
+The fix has shipped in every browser since 2019, and you've probably never typed its name: `Intl.PluralRules`.
+
+## English has one of the simplest plural systems on the planet
+
+English sorts numbers into two buckets. `1` is singular; everything else is plural. One file, two files, zero files. Two forms — and that's exactly what `count === 1 ? '' : 's'` encodes.
+
+It also sits near the floor of global complexity. Most of the world needs more buckets, and a few corners of it need fewer.
+
+Start with fewer. Japanese, Chinese, Korean, Vietnamese, and Thai get by with a single form: the noun is identical whether you have one or a thousand. The number does the counting; the word stays put. Here your `+ 's'` doesn't just mistranslate — it invents a distinction the language doesn't have.
+
+French keeps two everyday forms but moves the line: **0 and 1 are both singular.** "0 point", "1 point", then "2 points". Your English-shaped helper will write "0 points" in French, which is wrong, and the kind of wrong a reader clocks on the first glance.
+
+Then comes the family where the correct form depends on the number's last digits. Ukrainian, counting files:
+
+- `1` файл
+- `2`, `3`, `4` файли
+- `5`–`20` файлів
+- `21` файл — back to the first form
+- `22`, `23`, `24` файли
+- `25` файлів
+
+It keys off the last digit, with a carve-out for the teens. A ternary cannot express "the last digit, except eleven through fourteen" — you'd have to reimplement the whole rule.
+
+And here's the detail that kills the obvious next move ("fine, I'll special-case the hard languages"): the hard languages don't agree with each other. In Ukrainian and Russian, `21` takes the same form as `1`. In Polish — same family, same neighborhood — `21` takes the same form as `5`, while `22` matches `2`. There is no "Slavic rule" to drop in. There's Polish, and there's Russian, and they split on the number 21.
+
+At the top end sits Arabic, which uses all six categories that exist — separate forms for 0, 1, and 2, then one for 3–10 and another for 11–99, with the pattern repeating by the last two digits from there. Six forms for a single noun.
+
+## How many plural forms? That's a spec, not a guess
+
+This is a solved problem, and the solution is already installed on the machine running your code. Unicode's [CLDR](https://cldr.unicode.org/index/cldr-spec/plural-rules) defines exactly six plural categories — `zero`, `one`, `two`, `few`, `many`, `other` — plus a per-locale rule that maps any number into the subset that locale actually uses.
+
+| Locale | Forms it uses | Counting "file" |
+|---|---|---|
+| `ja` Japanese | `other` | one word for every count |
+| `en` English | `one`, `other` | `1 file` / `2 files` |
+| `uk` / `ru` Ukrainian, Russian | `one`, `few`, `many` (+`other`) | `1 файл` / `2 файли` / `5 файлів` |
+| `pl` Polish | `one`, `few`, `many` (+`other`) | `1 plik` / `2 pliki` / `5 plików` — and `21 plików`, like five |
+| `ar` Arabic | all six | distinct up to 11–99, then it cycles |
+
+The category names are the part people misread. They are *not* "singular / plural." `one` does not mean "the number one." In Russian, the `one` bucket holds 1, 21, 31, 101 — every number whose grammar matches the word for "one." Read the six categories as opaque keys — slot A, slot B, slot C — not as grammatical terms. They label which translation to use, nothing more.
+
+(One precise caveat: Russian and Ukrainian use three forms for whole numbers and a fourth, `other`, the instant a decimal appears — `1.5` lands in `other`. So "three forms" is true for counting, four across the full range.)
+
+## Intl.PluralRules: the part of the platform that already knows this
+
+You don't ship CLDR. Your runtime already did. `Intl.PluralRules` has been [Baseline since September 2019](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Intl/PluralRules) — every browser, plus Node, Deno, and Bun.
+
+```js
+const pr = new Intl.PluralRules('uk');
+
+pr.select(1);   // 'one'
+pr.select(3);   // 'few'
+pr.select(5);   // 'many'
+pr.select(21);  // 'one'  ← loops back, exactly like the grammar
+pr.select(22);  // 'few'
+```
+
+The one misunderstanding to clear up first: `select()` does not return a word. It returns a *category* — one of `'zero'`, `'one'`, `'two'`, `'few'`, `'many'`, `'other'`. It tells you which bucket the number lands in. You bring the words.
+
+That split is the entire design. CLDR owns the rule; only you own the translation. So you keep a small map from category to string and let `select` pick the key:
+
+```js
+const pr = new Intl.PluralRules('uk');
+const files = { one: 'файл', few: 'файли', many: 'файлів', other: 'файлів' };
+
+const label = (n) => `${n} ${files[pr.select(n)]}`;
+
+label(1);   // '1 файл'
+label(3);   // '3 файли'
+label(5);   // '5 файлів'
+label(21);  // '21 файл'
+```
+
+Always include an `other` key. It's the one category every locale can fall back on, and for single-form languages like Japanese it's the *only* key you'll ever hit — there, a map with nothing but `other` is complete.
+
+And reuse the instance. The constructor loads locale data, so building a `new Intl.PluralRules(...)` inside a render or a loop throws that work away on every call. Construct once, at module scope — the same rule that applies to every other `Intl.*` object.
+
+## A `plural()` helper that works in any language
+
+Wrap the pattern once and stop thinking about it:
+
+```ts
+type Forms = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
+
+const cache = new Map<string, Intl.PluralRules>();
+
+function plural(locale: string, n: number, forms: Forms): string {
+  let pr = cache.get(locale);
+  if (!pr) {
+    pr = new Intl.PluralRules(locale);
+    cache.set(locale, pr);
+  }
+  return forms[pr.select(n)] ?? forms.other;
+}
+
+plural('en', 3, { one: 'file', other: 'files' });
+// 'files'
+
+plural('uk', 3, { one: 'файл', few: 'файли', many: 'файлів', other: 'файлів' });
+// 'файли'
+```
+
+`Intl.LDMLPluralRule` is a built-in TypeScript type — the union of the six category strings — so `forms` is checked against the real category set, and the `& { other: string }` makes the fallback mandatory at compile time. Which is exactly the key people forget.
+
+## Three places pluralization still surprises people
+
+**Decimals fall into `other`.** `pr.select(1.5)` returns `'other'` in English — that's why it's "1.5 stars," not "1.5 star." A map with only `one` and `other` covers it. A map that defines `one`, `few`, `many` and skips `other` will quietly break on half-integer ratings.
+
+**Ordinals are a separate ruleset.** "1st, 2nd, 3rd, 4th" is not cardinal pluralization, and the cardinal rules won't give it to you. Ask for ordinals explicitly:
+
+```js
+const ord = new Intl.PluralRules('en', { type: 'ordinal' });
+const suffix = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
+const nth = (n) => `${n}${suffix[ord.select(n)]}`;
+
+nth(1);   // '1st'
+nth(2);   // '2nd'
+nth(3);   // '3rd'
+nth(4);   // '4th'
+nth(11);  // '11th'  ← the exception you know by ear
+nth(21);  // '21st'
+```
+
+The 11th/12th/13th carve-out — the thing that breaks a naive "1→st, 2→nd, 3→rd" mapping — is already in there. You'd have gotten it wrong by hand. So would I.
+
+**Ranges have their own form.** The plural category for "1–2 days" isn't always the category of either endpoint, and `selectRange(start, end)` resolves it. It landed across the major browsers in 2023, so check support if you still target older ones.
+
+## You might not need to call it directly
+
+If you already use a real internationalization library — anything built on ICU MessageFormat, like FormatJS / `react-intl`, i18next with its ICU plugin, or Lingui — it calls `Intl.PluralRules` for you. You write one ICU message with the plural branches; the library picks the branch. Don't wrap the wrapper.
+
+Some sibling APIs pluralize without ever telling you. `Intl.RelativeTimeFormat` produces "2 days ago" — and the correctly-formed version in any locale — off the same rules:
+
+```js
+new Intl.RelativeTimeFormat('uk', { numeric: 'auto' }).format(-2, 'day');
+// '2 дні тому'  — the 'few' form, picked for you
+```
+
+`Intl.NumberFormat` and `Intl.ListFormat` round out the family. Reach for the `plural()` helper above only when you're formatting your own nouns and you're not already inside an i18n framework.
+
+## When `count === 1 ? '' : 's'` is genuinely fine
+
+The ternary isn't a crime. It's correct English, and plenty of code is English-only on purpose:
+
+- Internal dashboards and dev tooling nobody will translate.
+- Log lines and error messages aimed at you, not at users.
+- A prototype you'll delete on Friday.
+
+The signal to watch for is the first translation file. The moment a `de.json` or `uk.json` lands in the repo, every hand-rolled `+ 's'` becomes a latent bug — it keeps emitting English-shaped grammar inside German and Ukrainian sentences, and it sails through review, because the *code* is fine. The grammar is the bug.
+
+There's nothing clever here and nothing to install. The plural rules for every written language are already sitting in your runtime, and reaching them costs one constructor and one method call. The only real work is remembering that "add an s" was never a string operation. It was English grammar, hardcoded, the whole time.
+
+If this scratched an itch, the same blind spot shows up when you *measure* text instead of counting it: [`.length` lies about a string the moment it holds an emoji or an accent](/blog/your-javascript-string-length-is-wrong).
+
+## FAQ
+
+**Does `Intl.PluralRules` translate words for me?**
+No. Given a number and a locale, it returns a category — `one`, `few`, `many`, and so on. You supply the words for each category. It picks the bucket; you fill it.
+
+**Can I use it in Node, or is it browser-only?**
+It's part of the ECMAScript Internationalization API, so it works in Node, Deno, and Bun as well as every browser since 2019. No package, no polyfill for modern targets.
+
+**Why is `one` not the same as "singular"?**
+`one` is a bucket label, not a grammatical number. In Russian the `one` bucket contains 1, 21, 31, and 101 — every number whose grammar matches the word for "one." Treat the six categories as keys, not as singular and plural.
