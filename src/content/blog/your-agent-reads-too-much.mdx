@@ -1,0 +1,79 @@
+---
+title: "Your Agent Reads Too Much"
+description: "Watching Claude open an 800-line file to change twelve of them is one of the most expensive habits in agentic coding. Here's how to make it navigate code instead of reading it — Grep, native LSP, Serena — and an honest look at which token-savings numbers you can actually trust."
+pubDate: 2026-06-13T12:00:00
+tags: ["claude-code", "ai", "llm", "context-engineering", "lsp", "developer-tools", "agentic-coding"]
+draft: false
+---
+
+There's a specific wince I've started having while watching Claude Code work. It opens a file to make a small change — and the file is hundreds of lines long. I watch them scroll past in the tool output, and I know that every one of them just moved into the context window, where they'll sit for the rest of the session whether the task needed them or not.
+
+That file is real, and it's in this blog. `src/components/WireframeCanvas.astro` is 785 lines, about 5,900 tokens. The last time I needed to touch one function in it, the default move — open the file, read the whole thing, edit it — would have spent all 5,900 tokens to change maybe thirty lines.
+
+I [wrote last time](/blog/your-claude-md-is-a-tax) about `CLAUDE.md` as a tax you pay on every turn. This is the other half of the same budget. If `CLAUDE.md` is the standing charge, whole-file reads are the impulse spending — and they're where most of the window actually goes. A long session rarely drowns in instructions. It drowns in files the agent read once, used one function from, and then carried, dead weight, until the next compaction threw them out.
+
+The fix isn't "read less and hope." It's to make the agent do what you do in your editor: jump to the thing, instead of reading everything around it.
+
+## The cheap win nobody bothers with
+
+Before any plugins or MCP servers, there's free money in how the agent already reads.
+
+Claude Code's `Grep` returns matching lines, not whole files. Its `Read` takes an `offset` and a `limit`. Most "it read the entire file" moments aren't a missing capability — they're the agent, or me in a lazy prompt, reaching for `Read` when `Grep` was the right tool. "Find where `useCart` is defined" should cost the eight lines around the definition, not the four hundred lines of the file it lives in.
+
+Anthropic thinks about this margin too. A recent line in the Claude Code changelog reads: *"Edit no longer requires a separate Read after viewing a file with `grep`."* It's a tiny entry, but it's the whole philosophy compressed: if you already saw the relevant lines through `grep`, you shouldn't have to re-ingest the entire file just to be allowed to edit it. They're shaving redundant reads off the critical path.
+
+It's worth seeing the gap in actual numbers. On that same component (token figures are the chars ÷ 4 estimate I used in the last post):
+
+```bash
+# the whole file — all of it lands in context
+wc -c src/components/WireframeCanvas.astro
+# 23,730 chars  ≈ 5,900 tokens
+
+# just the one function I needed
+grep -n -A12 "function buildIcosphere" src/components/WireframeCanvas.astro
+# ≈ 460 chars  ≈ 115 tokens
+```
+
+Same answer to the same question — "what does `buildIcosphere` do, so I can change it" — at roughly one-fiftieth of the cost. Do that fifty times in a session, which a working agent does without blinking, and the difference stops being rounding error. It's whether you hit a compaction at hour one or hour three.
+
+## Read the symbol, not the file
+
+`Grep` is the floor. The ceiling is letting the agent navigate code the way an IDE does — by symbols and references, not by raw text.
+
+Claude Code now ships a native LSP tool: go-to-definition, find-references, hover. It's the same language-server machinery your editor runs, and it answers "where is this defined" and "who calls this" by querying the language server's index instead of grepping the repo and reading every hit. For a typed codebase it's worth installing the code-intelligence plugin so the agent reaches for it by default.
+
+The tool that pioneered this for agents — and still goes further than the built-in one — is [Serena](https://github.com/oraios/serena), an MCP server that wraps a language server (or a JetBrains backend) and hands the model genuinely symbol-level tools. The three that change how a session feels:
+
+- `get_symbols_overview` returns a file's *skeleton* — the signatures, no bodies. On `WireframeCanvas.astro` that outline is under 1,000 tokens against the file's ~5,900: you learn the shape of the file without paying for its contents.
+- `find_symbol` pulls one symbol's body — `buildIcosphere` and nothing around it.
+- `find_referencing_symbols` walks every caller through the index. That's the one that replaces the grep-then-read-each-hit loop that quietly drops ten files into context.
+
+The mental shift is the whole point. You stop loading code in order to look through it, and start asking the index questions.
+
+## What actually changed this year
+
+For a long time the advice was "install Serena to save tokens," and it was good advice. It's now half-stale, and the native LSP tool is why. The *reading* side of Serena's pitch — jump to a definition, list references without opening files — is largely built into Claude Code now.
+
+So here's the division of labor I've settled on. Use the **native LSP** for navigation: it's there, it costs nothing, it needs no server. Reach for **Serena** when you want the agent to *edit* by symbol — `replace_symbol_body`, `insert_after_symbol`, `rename`, `safe_delete`. Native LSP is read-and-diagnose; Serena's remaining edge is the *write* side: changing a function by its identity instead of by computed line offsets, which is exactly the operation agents fumble when they're counting lines in a file they only half-remember. (The heavier refactors — `move`, `inline` — are JetBrains-backend only.) There's an ergonomic gap too: you ask Serena "where is `Foo` defined" by name, while raw LSP wants a `file:line:column`, which is an awkward thing for a model to produce reliably.
+
+## About those token-savings numbers
+
+Here's the part I have to be straight about, because most of the internet isn't.
+
+The numbers people quote for these tools are mostly vibes. You'll see "40x fewer tokens," "70% savings," "30–60% reduction," and almost none of them come from a controlled comparison. To its credit, Serena's own README doesn't play the game — its claims are qualitative ("much more token-efficient"; cross-file edits that "would cost 8–12 careful, error-prone steps collapse into one atomic call"). An honest description, no invented decimals.
+
+The cleanest *measured* figure I could find isn't even Serena's. It's from [Semble](https://blakecrosley.com/blog/agent-code-search-token-budget), a code-search tool, whose benchmark reports 45,692 tokens for "ripgrep plus file reads" versus 566 for its own retrieval — a 98% cut. It's a genuine measurement, but read the fine print: it's the tool's own benchmark, for a search tool, and the author is straight enough to flag some of his other figures as "telemetry rather than independent proof."
+
+So my rule is: **believe the direction, distrust the decimals.** The direction isn't in question — navigating to a symbol is obviously cheaper than ingesting the file around it, and you saw the 50× on a real file above. But a precise percentage with no methodology attached is marketing, not data. The only token number you should fully trust is the one you measured yourself, which is why `/context` and a `wc` one-liner beat any blog's headline number — including this one's.
+
+## When reading the whole file is the right call
+
+Navigation isn't a religion, and the failure mode on the other side is real: an agent that only ever greps narrow slices and never builds a model of how a module fits together patches the symbol in front of it and breaks the three things around it that it never looked at.
+
+So read the whole file when you actually need the whole file. When you're reviewing a module, tracing control flow end to end, learning an unfamiliar subsystem, or the file is small enough that the skeleton-then-symbol dance costs more than just reading it — read it. Navigation is the right tool for "I know what I'm looking for." Reading is the right tool for "I need to understand this." The mistake is using the second when you meant the first — which is the default the agent quietly drifts toward unless you point it the other way.
+
+## The same discipline, twice
+
+If you read the first half of this — the `CLAUDE.md` one — the shape here is identical, and that's the point. There it was the standing cost: text that loads every session whether the task wants it or not. Here it's the variable cost: text the agent pulls in mid-task and then carries forever. Both reduce to the same habit, which is the only context move that has ever actually worked for me: put less in the window, on purpose.
+
+The agent that reads less isn't cutting corners. It's the one that finally learned to consult the index instead of reading the whole library to answer a single question.
