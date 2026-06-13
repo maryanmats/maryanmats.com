@@ -1,0 +1,100 @@
+---
+title: "Your `CLAUDE.md` Is a Tax You Pay on Every Token"
+description: "I grew a careful CLAUDE.md for months, then measured it and read the research. A long CLAUDE.md costs you twice: tokens on every single turn, and a quieter tax that makes the model worse. Here's what I cut, and what I do instead."
+pubDate: 2026-06-13T10:00:00
+tags: ["claude-code", "ai", "llm", "context-engineering", "developer-tools", "agentic-coding"]
+draft: false
+---
+
+I was proud of my `CLAUDE.md`.
+
+It had grown for months, a rule at a time. Every time Claude Code did something I didn't like, I added a line. Curly braces on every `if`, even the one-liners. Test-first, no exceptions. Never `--no-verify` a commit. It read like a tidy constitution for how I want code written, and I treated it the way I treat a good lint config: more rules, more control, obviously better. I only ever added to it. I never once subtracted, and I never measured what it cost.
+
+Then I did the two things I should have done months earlier. I ran `/context` to see what the file was actually charging me per message. And I went reading to find out whether a bigger one would even buy me anything.
+
+Both answers annoyed me. This post is the result — and the short version is that a `CLAUDE.md` is not free configuration you write once. It's a bill you pay on every single message, and it turns sour at a much smaller size than you'd think.
+
+## Context is the only budget that matters
+
+The sentence that reorganized how I use Claude Code is sitting in plain sight on Anthropic's own [best-practices page](https://code.claude.com/docs/en/best-practices):
+
+> "Most best practices are based on one constraint: Claude's context window fills up fast, and performance degrades as it fills."
+
+Everything competes for that one finite window: the system prompt, the tool definitions, every file Claude reads, every command's output, the whole running conversation — and your `CLAUDE.md`. And here's the part that's easy to forget about that last one. `CLAUDE.md` isn't a config file the tool parses once at boot and discards. It's reloaded at the start of every conversation and rides along in context for the entire session. It's there on turn one and it's there on turn fifty.
+
+So the first cost is just arithmetic.
+
+## Tax #1: the tokens (this one is only math)
+
+Type `/context` in any session and you get a map of what's eating your window before you've typed a word — system prompt, tools, memory, `CLAUDE.md`, all of it, with token counts.
+
+I ran it on my own setup expecting to feel virtuous. My hand-written `CLAUDE.md` is genuinely small — around 570 tokens. Fine. But it's never the only thing loaded: the system prompt, the tool definitions, and a stack of auto-memory notes I'd forgotten writing all ride along too. Every session starts a few thousand tokens in the hole before Claude reads a single line of your code.
+
+You can get a rough read without leaving your shell — characters divided by four is a decent token estimate:
+
+```bash
+# rough token estimate for your CLAUDE.md files: chars ÷ 4 ≈ tokens
+wc -c ~/.claude/CLAUDE.md ./CLAUDE.md 2>/dev/null | awk '{printf "%6d tokens  %s\n", $1/4, $2}'
+```
+
+And the file itself isn't paid once. The docs are explicit — "CLAUDE.md is loaded every session" — so it's there at the start of every conversation, and on every turn within it. It's paid again in every parallel session you run, and if you've caught the Claude Code bug, you're running three or four at a time. A 5,000-token `CLAUDE.md` in a long agent run isn't 5,000 tokens. It's 5,000 tokens times every step the agent takes.
+
+That's the visible tax. It's real, and it's the cheap one.
+
+## Tax #2: every line is a constraint (this is the one that hurt)
+
+Here's what I didn't see coming. I had assumed a longer `CLAUDE.md` was, at worst, *wasteful* — pay a few extra tokens, get a bit more control, a trade that always nets out positive. It does not always net out positive.
+
+In February 2026 a group at ETH Zürich published a study with the unglamorous title [*Evaluating AGENTS.md*](https://arxiv.org/abs/2602.11988) — `AGENTS.md` being the cross-tool cousin of `CLAUDE.md`. They ran real coding agents on real repository issues, with and without these context files. Their finding, quoted straight from the abstract: context files "tend to reduce task success rates compared to providing no repository context, while also increasing inference cost by over 20%."
+
+Read that again, because it's the opposite of the folklore. The file you add to help the agent tends, on average, to make it slightly *worse* — and a fifth more *expensive* while doing it.
+
+The mechanism is the interesting part. The agents respected the instructions — too faithfully. Every extra requirement in the file became one more thing to satisfy: more tests to run, more files to traverse, more boxes to tick before getting to the actual problem. The paper's recommendation reads almost like a koan: context files "should describe only minimal requirements."
+
+It lines up with something Chroma measured in July 2025 in a report they called [*Context Rot*](https://www.trychroma.com/research/context-rot). They pushed 18 frontier models — Claude, GPT, Gemini, Qwen — through growing input lengths and found that *every one of them* degrades as the input grows, often long before the window is anywhere near full. A model with a 200K-token window can measurably lose the thread at 50K. Tokens aren't neutral even when there's "room" for them. They dilute attention.
+
+Put the two together and the second tax comes into focus. It isn't that a big `CLAUDE.md` costs tokens. It's that every line competes with the actual task for the model's attention — and the model treats your *preferences* as hard *requirements*. Anthropic says the quiet part out loud on that same best-practices page:
+
+> "Bloated `CLAUDE.md` files cause Claude to ignore your actual instructions!"
+
+You don't get a warning when it happens. You just get a rule silently dropped on the floor, and a more expensive, slightly dumber agent.
+
+## What actually earns a place in the file
+
+Once I stopped treating `CLAUDE.md` as a constitution and started treating it as a cost center, the editing got easy. Anthropic publishes a test that fits on one line:
+
+> "For each line, ask: 'Would removing this cause Claude to make mistakes?' If not, cut it."
+
+The corollary is what killed half my file: **if the agent can figure it out by reading the code, delete it.** Claude doesn't need me to tell it the project uses React — it can see the imports. It doesn't need my folder structure narrated — it has `ls` and `grep`. What it genuinely can't guess is the stuff that *isn't* in the code: the build command with three non-obvious flags, the one test runner we actually use, the migrations folder it must never touch, the gotcha that took down production once.
+
+Boris Cherny, who created Claude Code, [keeps his deliberately lean](https://howborisusesclaudecode.com/) — by his own account a project file in the low thousands of tokens and a personal one well under a hundred. His rule for growing it is reactive, not anticipatory: add a line when Claude actually gets something wrong, so it won't repeat the mistake. And the part everyone skips — he also *subtracts*, pruning the file down as the model stops needing the rule.
+
+That's the whole discipline. Add a line only when Claude has earned it by actually making the mistake. Delete it the moment the model stops needing it. A healthy `CLAUDE.md` oscillates around some small size. Mine had only ever grown, which in hindsight is the tell.
+
+## The real fix is architectural, not editorial
+
+Pruning has a floor, though. There's knowledge you genuinely want available — a deploy runbook, your API conventions, one gnarly domain explanation — that's too big to live in always-on context and too useful to throw out. The move isn't to cram it into `CLAUDE.md` and eat the tax forever. It's to stop loading it until the moment it's needed.
+
+Three changes did more for me than any amount of wordsmithing.
+
+**1. Skills instead of more `CLAUDE.md`.** A skill is a `SKILL.md` file with a name, a one-line description, and a body. The magic is *when* it loads: Claude sees only the name and description at startup — a few dozen tokens — and pulls the full body into context only when a task actually matches it. It's lazy loading for instructions. The long stuff I used to keep resident in `CLAUDE.md` — onboarding notes, a release checklist, the explanation of one subsystem that always trips people up — lives in skills now. Startup context drops; the knowledge still shows up the instant a task reaches for it. The docs [point here too](https://code.claude.com/docs/en/best-practices): anything only *sometimes* relevant should be a skill, not a permanent `CLAUDE.md` line.
+
+**2. Let it navigate code instead of reading it.** The single most expensive habit an agent has is slurping a whole 800-line file into context to find one 12-line function. For a while you fixed that with an MCP server like [Serena](https://github.com/oraios/serena) that wraps a language server and hands the model symbol-level tools — "give me the body of `useCart`," "find every caller of this" — instead of reading the file to locate them. In December 2025 Claude Code shipped the read half of this natively: an LSP tool with go-to-definition, find-references, and hover, the same machinery your editor uses (for typed languages, a code-intelligence plugin switches it on; tools like Serena still go further into symbol-level *edits* and refactors). One honest caveat: the dramatic token-savings numbers people quote for these tools — "40x," "70%" — are mostly vibes. I couldn't find a clean controlled benchmark for any of them, and the one solid measurement I trust comes from a different category of tool. But the direction is obviously right, and you can watch it in `/context`: an agent that resolves a symbol leaves a far smaller dent than one that reads the file around it.
+
+**3. Subagents to quarantine the mess.** When Claude investigates something — "how does our auth refresh its tokens?" — it reads a dozen files, and every one of them lands in *your* context and stays there. A subagent does the same exploration in its own separate window and reports back only the summary. The docs call them one of the most powerful tools you have, precisely because context is the fundamental constraint. Caveat here too, because it cuts against the hype: a subagent isn't automatically cheaper — it gets its own full context window, so firing off five of them for trivial lookups can cost *more* overall. Use them to keep noise out of the main thread, not as a reflex.
+
+## The part that isn't in any tips thread
+
+There's a pattern under all of this that took me embarrassingly long to see, and it runs straight against the "47 Claude Code tips" genre.
+
+The better the model gets, the *less* scaffolding it needs.
+
+You can watch the tool concede this about itself. Anthropic's own best-practices page — the same one quoted throughout this post — now hedges the planning ritual it used to push: plan mode "is useful, but also adds overhead," and when "the scope is clear and the fix is small," it tells you to skip it and "ask Claude to do it directly." Its closing advice is to build the judgment for when to drop the scaffolding entirely. The arrow points one way: as the model gets better, you give it *less*, not more.
+
+That reframed the whole file for me. Every line in a `CLAUDE.md` is a small bet that the model is too dumb to work something out on its own. Some of those bets are still good — the unguessable build flag, the dangerous folder, the convention no amount of reading would reveal. But a lot of the rules I'd accumulated were bets I'd quietly already lost. The model had gotten good enough that my instruction was just noise it had to read past — every turn, in every session, forever.
+
+So now I do the unintuitive thing. I keep a `CLAUDE.md` I'm slightly embarrassed by how small it is. I push the real knowledge into skills that load on demand. I let the LSP and subagents fetch context instead of front-loading it. And every couple of weeks I open the file and ask Anthropic's question about each line — would deleting this make Claude worse? Usually the answer is no.
+
+So I delete it.
+
+The best `CLAUDE.md` isn't the one that documents everything you know. It's the one small enough that Claude actually reads all of it.
