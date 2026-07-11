@@ -24,7 +24,7 @@ const { tag, posts } = Astro.props;
   title={`${tag} — ${SITE_TITLE}`}
   description={`Articles tagged "${tag}".`}
 >
-  <div class="max-w-5xl mx-auto w-full px-6 py-14">
+  <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
     <Breadcrumbs
       items={[
         { label: 'Home', href: '/' },
@@ -33,12 +33,12 @@ const { tag, posts } = Astro.props;
       current={`#${tag}`}
     />
 
-    <header class="mb-10">
-      <h1 class="font-display text-3xl font-800 tracking-tight">
-        <span class="text-green">#</span>{tag}
+    <header class="mb-10 pb-6 border-b border-line">
+      <h1 class="font-serif text-4xl font-500 tracking-[-0.015em] text-ink">
+        <span class="text-ink-faint">#</span>{tag}
       </h1>
-      <p class="text-ink-muted text-sm mt-1">
-        {posts.length} article{posts.length !== 1 && 's'}
+      <p class="font-serif text-lg text-ink-muted mt-2">
+        {posts.length} essay{posts.length !== 1 && 's'}
       </p>
     </header>
 

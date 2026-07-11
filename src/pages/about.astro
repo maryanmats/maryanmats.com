@@ -7,96 +7,54 @@ import { SITE_TITLE, TECH_STACK } from '../consts';
 
 <BaseLayout
   title={`About — ${SITE_TITLE}`}
-  description="Software Engineer. TypeScript, React, Web."
+  description="Maryan Mats — a frontend engineer working in TypeScript, React, and the modern web."
 >
   <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="About" />
 
-    <!-- Bento grid -->
-    <div class="grid md:grid-cols-[1.4fr_1fr] gap-3 md:gap-4">
-      <!-- Main -->
-      <div
-        class="rounded-2xl border border-line bg-panel p-8 md:p-10 flex flex-col justify-between min-h-[280px] animate-fade-up"
-        style="animation-delay: 80ms;"
-      >
-        <div>
-          <p
-            class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
-          >
-            About
-          </p>
-          <h1
-            class="font-display text-4xl md:text-5xl font-800 tracking-tight leading-[1.05] mb-5"
-          >
-            Maryan Mats<span class="text-green">.</span>
-          </h1>
-          <p class="text-ink-muted leading-[1.8] max-w-md">
-            Software Engineer who turns ideas into interfaces. I work with
-            TypeScript, React, and the modern web stack — and I care about every
-            detail, from types to transitions.
-          </p>
-        </div>
-        <p class="text-[11px] font-mono text-ink-faint mt-6">
-          Ukraine · Remote
+    <header class="mb-12 animate-fade-up">
+      <p class="text-body-sm text-ink-faint mb-4">About</p>
+      <h1 class="font-serif text-4xl md:text-5xl font-500 tracking-[-0.015em] text-ink">
+        Maryan Mats
+      </h1>
+    </header>
+
+    <div class="grid md:grid-cols-[1.6fr_1fr] gap-12 md:gap-16">
+      <!-- Bio -->
+      <div class="font-serif text-lg md:text-xl text-ink leading-relaxed space-y-6 max-w-xl">
+        <p>
+          I'm a frontend engineer based in Ukraine. I work mostly in TypeScript —
+          building interfaces with React, Next.js, and Astro, and paying
+          attention to the layer most people skip past: the types, the edge
+          cases, the moment an interaction either feels right or doesn't.
+        </p>
+        <p>
+          This is where I write it down. Most essays start as something I had to
+          figure out at work — a pattern that finally clicked, an API I'd misread
+          for years, a decision I'd argue for now. A few ship with small
+          libraries you can install and read in one sitting.
         </p>
       </div>
 
-      <!-- Stack -->
-      <div
-        class="rounded-2xl border border-line bg-panel p-8 flex flex-col justify-between min-h-[280px] animate-fade-up"
-        style="animation-delay: 140ms;"
-      >
-        <p
-          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
-        >
-          Stack
-        </p>
-        <div class="flex-1 flex flex-col justify-center">
-          <div class="space-y-1.5 font-mono text-[13px]">
-            {
-              TECH_STACK.map((t) => (
-                <div class="flex items-center gap-2.5 text-ink-muted hover:text-green transition-colors duration-200 cursor-default">
-                  <span class="w-1 h-1 rounded-full bg-green/50" />
-                  <span>{t}</span>
-                </div>
-              ))
-            }
-          </div>
-        </div>
-      </div>
-
-      <!-- Connect -->
-      <div
-        class="rounded-2xl border border-line bg-panel p-8 animate-fade-up"
-        style="animation-delay: 200ms;"
-      >
-        <p
-          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-5"
-        >
-          Connect
-        </p>
-        <ContactLinks />
-      </div>
-
-      <!-- Now -->
-      <div
-        class="rounded-2xl border border-line bg-green/[0.04] p-8 flex flex-col justify-between animate-fade-up"
-        style="animation-delay: 260ms;"
-      >
-        <p
-          class="text-[11px] font-mono text-green uppercase tracking-[0.25em] mb-4"
-        >
-          Now
-        </p>
-        <div class="flex-1 flex items-center">
-          <p
-            class="font-display text-lg md:text-xl font-600 leading-snug tracking-tight text-ink"
-          >
-            Building products, writing articles, and trying to make the web a
-            little better every&nbsp;day<span class="text-green">.</span>
+      <!-- Side rail -->
+      <aside class="space-y-10">
+        <section>
+          <h2 class="text-body-sm font-medium text-ink-muted mb-3">Stack</h2>
+          <p class="font-serif text-lg text-ink leading-relaxed">
+            {TECH_STACK.join(', ')}.
           </p>
-        </div>
-      </div>
+        </section>
+
+        <section>
+          <h2 class="text-body-sm font-medium text-ink-muted mb-3">Elsewhere</h2>
+          <ContactLinks />
+        </section>
+
+        <section>
+          <h2 class="text-body-sm font-medium text-ink-muted mb-3">Based in</h2>
+          <p class="font-serif text-lg text-ink">Ukraine · Remote</p>
+        </section>
+      </aside>
     </div>
   </div>
 </BaseLayout>

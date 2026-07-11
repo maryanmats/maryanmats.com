@@ -2,6 +2,7 @@
 import { getCollection } from 'astro:content';
 import EmptyState from '../components/EmptyState.astro';
 import Icon from '../components/Icon.astro';
+import PostRow from '../components/PostRow.astro';
 import WireframeCanvas from '../components/WireframeCanvas.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import { SITE_DESCRIPTION, SITE_TITLE, TECH_STACK } from '../consts';
@@ -10,7 +11,7 @@ import { getReadingTime } from '../utils/reading-time';
 
 const allPosts = await getPublishedPosts();
 const [featured, ...rest] = allPosts;
-const morePosts = rest.slice(0, 4);
+const morePosts = rest.slice(0, 5);
 const projects = (await getCollection('projects')).sort(
   (a, b) => a.data.order - b.data.order,
 );
@@ -18,51 +19,28 @@ const projects = (await getCollection('projects')).sort(
 
 <BaseLayout title={SITE_TITLE} description={SITE_DESCRIPTION}>
   <!-- Hero -->
-  <section class="max-w-5xl mx-auto px-6 pt-16 md:pt-20 pb-12">
-    <div class="flex flex-col md:flex-row items-center gap-8 md:gap-4">
-      <div class="flex-1 max-w-xl">
-        <div class="animate-fade-up">
-          <div class="flex items-center gap-3 mb-5">
-            <div class="w-8 h-px bg-green"></div>
-            <span
-              class="text-[11px] font-mono text-green uppercase tracking-[0.2em]"
-              >Software Engineer</span
-            >
-          </div>
-          <h1
-            class="font-display text-5xl md:text-[5.5rem] font-800 tracking-tight leading-[0.95] mb-6"
-          >
-            MARYAN<br />
-            <span class="relative">
-              MATS
-              <span
-                class="absolute -right-4 md:-right-5 top-1 text-green text-3xl md:text-5xl"
-                >.</span
-              >
-            </span>
-          </h1>
-        </div>
-        <div class="animate-fade-up" style="animation-delay: 120ms;">
-          <p class="text-ink-muted leading-[1.8] max-w-md mb-6">
-            Creative Engineer & TypeScript Devotee. I craft web interfaces with
-            obsessive attention to detail and write about what I learn along the
-            way.
-          </p>
-          <div class="flex flex-wrap gap-2">
-            {
-              TECH_STACK.slice(0, 4).map((t) => (
-                <span class="px-2.5 py-0.5 text-[11px] font-mono rounded-md border border-line text-ink-faint">
-                  {t}
-                </span>
-              ))
-            }
-          </div>
+  <section class="max-w-5xl mx-auto px-6 pt-16 md:pt-24 pb-16 md:pb-20">
+    <div class="flex flex-col md:flex-row md:items-center gap-10 md:gap-8">
+      <div class="flex-1 max-w-xl animate-fade-up">
+        <p class="text-body-sm text-ink-faint mb-6">Frontend engineer</p>
+        <h1
+          class="font-serif text-4xl md:text-[3.75rem] font-500 leading-[1.08] tracking-[-0.015em] text-ink mb-6"
+        >
+          I build web interfaces, and write about the parts worth remembering.
+        </h1>
+        <p class="font-serif text-lg md:text-xl text-ink-muted leading-relaxed max-w-lg">
+          Mostly TypeScript — the language, the browser, and the small decisions
+          that decide whether an interface holds up over time.
+        </p>
+        <div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-8">
+          {
+            TECH_STACK.slice(0, 5).map((t) => (
+              <span class="text-body-sm text-ink-faint">{t}</span>
+            ))
+          }
         </div>
       </div>
-      <div
-        class="flex-shrink-0 animate-fade-in"
-        style="animation-delay: 250ms;"
-      >
+      <div class="flex-shrink-0 animate-fade-in" style="animation-delay: 200ms;">
         <WireframeCanvas
           posts={allPosts.slice(0, 5).map((p) => ({
             title: p.data.title,
@@ -78,186 +56,111 @@ const projects = (await getCollection('projects')).sort(
     </div>
   </section>
 
-  <!-- Featured Article -->
-  <section class="max-w-5xl mx-auto px-6 py-16 border-t border-line">
-    <div class="flex items-baseline justify-between mb-8">
-      <h2
-        class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.2em]"
-      >
-        Latest article
-      </h2>
+  <!-- Writing -->
+  <section class="max-w-5xl mx-auto px-6 py-14 border-t border-line">
+    <div class="flex items-baseline justify-between mb-10">
+      <h2 class="text-body-sm text-ink-muted">Writing</h2>
       <a
         href="/blog"
-        class="text-[11px] font-mono text-ink-faint hover:text-green no-underline transition-colors"
-        >View all &rarr;</a
+        class="text-body-sm text-ink-faint hover:text-ink no-underline transition-colors"
+        >All essays &rarr;</a
       >
     </div>
+
     {
       featured ? (
         <a
           href={`/blog/${featured.id}/`}
-          class="group block p-6 md:p-8 rounded-xl border border-line/60 bg-panel/50 hover:border-green/30 hover:bg-panel transition-all duration-250 no-underline animate-fade-up"
+          class="group block no-underline mb-4"
         >
-          <div class="flex flex-col gap-4">
-            <div class="flex items-center gap-3 text-[10px] font-mono text-ink-faint">
-              <time datetime={featured.data.pubDate.toISOString()}>
-                {featured.data.pubDate.toLocaleDateString('en-us', {
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </time>
-              <span class="w-1 h-1 rounded-full bg-ink-faint/40" />
-              <span>{getReadingTime(featured.body ?? '')} min read</span>
-              {featured.data.series && (
-                <>
-                  <span class="w-1 h-1 rounded-full bg-ink-faint/40" />
-                  <span class="px-1.5 py-0.5 text-[9px] text-green bg-green-subtle rounded">
-                    Part {featured.data.series.part}/{featured.data.series.total}
-                  </span>
-                </>
-              )}
-            </div>
-            <h3 class="font-display font-700 text-xl md:text-2xl text-ink group-hover:text-green transition-colors duration-200 leading-tight">
-              {featured.data.title}
-            </h3>
-            <p class="text-[13px] text-ink-muted leading-relaxed max-w-2xl">
-              {featured.data.description}
-            </p>
-            {featured.data.tags.length > 0 && (
-              <div class="flex flex-wrap gap-1.5 pt-1">
-                {featured.data.tags.slice(0, 4).map((tag: string) => (
-                  <span class="px-2 py-0.5 text-[10px] font-mono text-ink-faint bg-tag-bg rounded">
-                    {tag}
-                  </span>
-                ))}
-              </div>
+          <div class="flex items-center gap-2.5 text-mini font-mono text-ink-faint mb-3">
+            <time datetime={featured.data.pubDate.toISOString()}>
+              {featured.data.pubDate.toLocaleDateString('en-us', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </time>
+            <span class="text-line">/</span>
+            <span>{getReadingTime(featured.body ?? '')} min read</span>
+            {featured.data.series && (
+              <>
+                <span class="text-line">/</span>
+                <span>
+                  Part {featured.data.series.part} of {featured.data.series.total}
+                </span>
+              </>
             )}
           </div>
+          <h3 class="font-serif text-2xl md:text-[2rem] font-500 leading-[1.15] tracking-[-0.01em] text-ink group-hover:text-green transition-colors duration-200 mb-3 max-w-2xl">
+            {featured.data.title}
+          </h3>
+          <p class="font-serif text-lg text-ink-muted leading-relaxed max-w-2xl">
+            {featured.data.description}
+          </p>
         </a>
       ) : (
-        <EmptyState message="No articles yet. Stay tuned." />
+        <EmptyState message="No essays yet." />
+      )
+    }
+
+    {
+      morePosts.length > 0 && (
+        <div class="mt-12 pt-2 border-t border-line">
+          {morePosts.map((post) => (
+            <PostRow
+              id={post.id}
+              title={post.data.title}
+              pubDate={post.data.pubDate}
+              body={post.body}
+              series={post.data.series}
+            />
+          ))}
+        </div>
       )
     }
   </section>
 
-  <!-- More Articles -->
-  {
-    morePosts.length > 0 && (
-      <section class="max-w-5xl mx-auto px-6 py-16 border-t border-line">
-        <div class="mb-8">
-          <h2 class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.2em]">
-            More articles
-          </h2>
-        </div>
-        <div class="stagger grid grid-cols-1 md:grid-cols-2 gap-4">
-          {morePosts.map((post, i) => (
-            <a
-              href={`/blog/${post.id}/`}
-              class="group flex flex-col gap-3 p-5 rounded-xl border border-line/60 bg-panel/50 hover:border-green/30 hover:bg-panel transition-all duration-250 no-underline"
-              style={`--stagger-i: ${i}`}
-            >
-              <div class="flex items-center gap-3 text-[10px] font-mono text-ink-faint">
-                <time datetime={post.data.pubDate.toISOString()}>
-                  {post.data.pubDate.toLocaleDateString('en-us', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </time>
-                <span class="w-1 h-1 rounded-full bg-ink-faint/40" />
-                <span>{getReadingTime(post.body ?? '')} min read</span>
-                {post.data.series && (
-                  <>
-                    <span class="w-1 h-1 rounded-full bg-ink-faint/40" />
-                    <span class="px-1.5 py-0.5 text-[9px] text-green bg-green-subtle rounded">
-                      {post.data.series.part}/{post.data.series.total}
-                    </span>
-                  </>
-                )}
-              </div>
-              <h3 class="font-display font-600 text-[15px] text-ink group-hover:text-green transition-colors duration-200 leading-snug">
-                {post.data.title}
-              </h3>
-              <p class="text-xs text-ink-faint leading-relaxed line-clamp-2">
-                {post.data.description}
-              </p>
-              {post.data.tags.length > 0 && (
-                <div class="flex flex-wrap gap-1.5 mt-auto pt-2">
-                  {post.data.tags.slice(0, 3).map((tag: string) => (
-                    <span class="px-2 py-0.5 text-[10px] font-mono text-ink-faint bg-tag-bg rounded">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </a>
-          ))}
-        </div>
-      </section>
-    )
-  }
-
-  <!-- Selected Projects -->
-  <section class="max-w-5xl mx-auto px-6 py-16 border-t border-line">
-    <div class="flex items-baseline justify-between mb-8">
-      <h2
-        class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.2em]"
-      >
-        Selected projects
-      </h2>
+  <!-- Projects -->
+  <section class="max-w-5xl mx-auto px-6 py-14 border-t border-line">
+    <div class="flex items-baseline justify-between mb-10">
+      <h2 class="text-body-sm text-ink-muted">Projects</h2>
       <a
         href="/projects"
-        class="text-[11px] font-mono text-ink-faint hover:text-green no-underline transition-colors"
-        >View all &rarr;</a
+        class="text-body-sm text-ink-faint hover:text-ink no-underline transition-colors"
+        >All projects &rarr;</a
       >
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
       {
         projects.map((p) => (
           <a
             href={p.data.href}
             target="_blank"
             rel="noopener noreferrer"
-            class="group flex flex-col gap-4 p-5 md:p-6 rounded-xl border border-line/60 bg-panel/50 hover:border-green/30 hover:bg-panel transition-all duration-250 no-underline"
+            class="post-row group flex items-baseline justify-between gap-4 py-4 border-b border-line/60 no-underline"
           >
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-3">
-                <div class="w-2 h-2 rounded-full bg-green/60 group-hover:bg-green transition-colors" />
-                <span class="font-display font-700 text-[15px] text-ink group-hover:text-green transition-colors duration-200">
+            <div class="min-w-0">
+              <div class="flex items-baseline gap-2.5 flex-wrap">
+                <span class="font-serif text-lg font-500 text-ink group-hover:text-green transition-colors duration-200">
                   {p.data.title}
                 </span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span
-                  class:list={[
-                    'text-[10px] font-mono px-1.5 py-0.5 rounded',
-                    p.data.status === 'Live'
-                      ? 'text-green bg-green/8'
-                      : 'text-ink-faint bg-tag-bg',
-                  ]}
-                >
-                  {p.data.status}
+                <span class="text-mini font-mono text-ink-faint">
+                  {p.data.status === 'Live' ? 'Live' : p.data.status}
                 </span>
-                <Icon
-                  name="arrow-external"
-                  class="w-3.5 h-3.5 text-ink-faint group-hover:text-green transition-colors"
-                />
               </div>
+              <p class="text-body-sm text-ink-muted leading-relaxed mt-1 max-w-xl">
+                {p.data.description}
+              </p>
             </div>
-            <p class="text-xs text-ink-muted leading-relaxed">
-              {p.data.description}
-            </p>
-            <div class="flex items-center justify-between mt-auto pt-2 border-t border-line/40">
-              <div class="flex flex-wrap gap-1.5">
-                {p.data.tech.slice(0, 4).map((t: string) => (
-                  <span class="px-2 py-0.5 text-[10px] font-mono text-ink-faint bg-tag-bg rounded">
-                    {t}
-                  </span>
-                ))}
-              </div>
-              <span class="text-[10px] font-mono text-ink-faint">
+            <div class="flex items-center gap-3 shrink-0 pt-1">
+              <span class="text-mini font-mono text-ink-faint hidden sm:block">
                 {p.data.year}
               </span>
+              <Icon
+                name="arrow-external"
+                class="w-3.5 h-3.5 text-ink-faint group-hover:text-green transition-colors"
+              />
             </div>
           </a>
         ))

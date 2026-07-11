@@ -24,31 +24,27 @@ const years = Object.keys(grouped)
   title={`Blog — ${SITE_TITLE}`}
   description="Articles about TypeScript, React, and the modern web."
 >
-  <div class="max-w-5xl mx-auto w-full px-6 py-14">
+  <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
     <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="Blog" />
 
     <header class="mb-10 animate-fade-up">
-      <h1 class="font-display text-4xl font-800 tracking-tight mb-2">Blog</h1>
-      <p class="text-ink-muted text-sm">
-        Articles about TypeScript, React, and the modern web.
+      <h1 class="font-serif text-4xl md:text-5xl font-500 tracking-[-0.015em] text-ink mb-3">
+        Writing
+      </h1>
+      <p class="font-serif text-lg text-ink-muted max-w-xl">
+        Essays on TypeScript, the browser, and the craft of building interfaces.
       </p>
     </header>
 
     {
       allTags.length > 0 && (
-        <div class="flex flex-wrap gap-2 mb-10">
-          <a
-            href="/blog"
-            class="px-2.5 py-1 text-[11px] font-mono rounded-md bg-green text-page no-underline"
-          >
-            All
-          </a>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-12 pb-6 border-b border-line">
           {allTags.map((tag) => (
             <a
               href={`/blog/tag/${tag}/`}
-              class="px-2.5 py-1 text-[11px] font-mono rounded-md bg-tag-bg text-ink-faint no-underline border border-transparent hover:border-green hover:text-green transition-colors duration-200"
+              class="text-body-sm font-mono text-ink-faint no-underline hover:text-green transition-colors duration-200"
             >
-              {tag}
+              #{tag}
             </a>
           ))}
         </div>
@@ -61,7 +57,7 @@ const years = Object.keys(grouped)
       ) : (
         years.map((year) => (
           <section class="mb-10">
-            <h2 class="text-[11px] font-mono text-ink-faint uppercase tracking-[0.15em] mb-4 flex items-center gap-3">
+            <h2 class="text-body-sm font-mono text-ink-faint mb-4 flex items-center gap-3">
               <span>{year}</span>
               <span class="flex-1 h-px bg-line" />
             </h2>

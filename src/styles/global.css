@@ -7,9 +7,14 @@
    ────────────────────────────────────────────── */
 @theme {
   /* ── Fonts ──────────────────────────────────── */
-  --font-display: 'Manrope', system-ui, sans-serif;
-  --font-body: 'Manrope', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  /* Serif = the voice (headings + long-form reading).                 */
+  /* Sans  = interface chrome (nav, labels, buttons).                  */
+  /* Mono  = code and tabular data (dates, counts).                    */
+  --font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-body: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'JetBrains Mono', monospace;
 
   /* ── Colors ─────────────────────────────────── */
   --color-page: var(--c-page);
@@ -18,86 +23,81 @@
   --color-ink: var(--c-ink);
   --color-ink-muted: var(--c-ink-muted);
   --color-ink-faint: var(--c-ink-faint);
+  /* Accent. NOTE: utility is still named `green` to avoid churn across
+     the codebase, but it now resolves to the ink-blue accent below.   */
   --color-green: var(--c-green);
   --color-green-hover: var(--c-green-hover);
   --color-green-subtle: var(--c-green-subtle);
+  --color-accent: var(--c-green);
+  --color-accent-hover: var(--c-green-hover);
+  --color-accent-subtle: var(--c-green-subtle);
   --color-line: var(--c-line);
   --color-code-bg: var(--c-code-bg);
   --color-tag-bg: var(--c-tag-bg);
 
   /* ── Font sizes ─────────────────────────────── */
-  /* Custom sizes that sit between/around Tailwind's default scale.      */
-  /* Named to avoid colliding with built-in text-xs (12px),              */
-  /* text-sm (14px), text-base (16px), etc.                              */
-  /* Migrate from: text-[9px], text-[10px], text-[11px], text-[13px],   */
-  /*               text-[15px]                                           */
-  --font-size-micro: 9px; /* text-micro — wireframe micro labels    */
-  --font-size-mini: 10px; /* text-mini  — tags, badges, timestamps  */
-  --font-size-caption: 11px; /* text-caption — section headings, mono  */
-  --font-size-body-sm: 13px; /* text-body-sm — nav items, TOC links    */
-  --font-size-body-md: 15px; /* text-body-md — subtitles, descriptions */
+  --font-size-micro: 9px;
+  --font-size-mini: 10px;
+  --font-size-caption: 11px;
+  --font-size-body-sm: 13px;
+  --font-size-body-md: 15px;
 
   /* ── Letter spacing ─────────────────────────── */
-  /* Migrate from: tracking-[0.15em], tracking-[0.2em], tracking-[0.25em] */
-  --letter-spacing-caps: 0.15em; /* tracking-caps  — section labels   */
-  --letter-spacing-caps-wide: 0.2em; /* tracking-caps-wide — home headings */
-  --letter-spacing-caps-wider: 0.25em; /* tracking-caps-wider — about labels */
+  --letter-spacing-caps: 0.15em;
+  --letter-spacing-caps-wide: 0.2em;
+  --letter-spacing-caps-wider: 0.25em;
 
   /* ── Line heights ───────────────────────────── */
-  /* Migrate from: leading-[1.8]                    */
-  --line-height-spacious: 1.8; /* leading-spacious — airy body paragraphs */
+  --line-height-spacious: 1.8;
 
   /* ── Spacing / Sizing ───────────────────────── */
-  /* Migrate from: max-w-[680px], min-h-[280px]    */
-  --width-article: 680px; /* w-article / max-w-article — content col */
-  --height-card-min: 280px; /* min-h-card-min — about page cards       */
+  --width-article: 680px;
+  --height-card-min: 280px;
 
   /* ── Blur ───────────────────────────────────── */
-  /* Migrate from: blur-[40px], blur-[50px], blur-[80px], blur-[100px]   */
-  --blur-glow-sm: 40px; /* blur-glow-sm  — inner glow             */
-  --blur-glow-md: 50px; /* blur-glow-md  — inner glow responsive  */
-  --blur-glow-lg: 80px; /* blur-glow-lg  — outer glow             */
-  --blur-glow-xl: 100px; /* blur-glow-xl  — outer glow responsive  */
+  --blur-glow-sm: 40px;
+  --blur-glow-md: 50px;
+  --blur-glow-lg: 80px;
+  --blur-glow-xl: 100px;
 
   /* ── Translate ──────────────────────────────── */
-  /* Migrate from: -translate-y-[40%]              */
-  --translate-y-glow: 40%; /* translate-y-glow — glow vertical offset */
+  --translate-y-glow: 40%;
 }
 
 /* ──────────────────────────────────────────────
-   Light theme
+   Light theme — warm paper, warm ink, ink-blue accent
    ────────────────────────────────────────────── */
 :root {
-  --c-page: #f8faf9;
+  --c-page: #fbfaf8;
   --c-panel: #ffffff;
-  --c-panel-hover: #f2f5f3;
-  --c-ink: #0f1a14;
-  --c-ink-muted: #4a5c52;
-  --c-ink-faint: #617a70;
-  --c-green: #16794a;
-  --c-green-hover: #12a355;
-  --c-green-subtle: #e6f0ea;
-  --c-line: #d8e0db;
-  --c-code-bg: #eef2f0;
-  --c-tag-bg: #e2eae5;
+  --c-panel-hover: #f4f2ed;
+  --c-ink: #1c1b18;
+  --c-ink-muted: #57534b;
+  --c-ink-faint: #8a8478;
+  --c-green: #2c4e74;
+  --c-green-hover: #37628f;
+  --c-green-subtle: rgba(44, 78, 116, 0.08);
+  --c-line: #e7e3da;
+  --c-code-bg: #f3f1eb;
+  --c-tag-bg: #edeae2;
 }
 
 /* ──────────────────────────────────────────────
-   Dark theme
+   Dark theme — warm charcoal, muted blue accent
    ────────────────────────────────────────────── */
 :root.dark {
-  --c-page: #1a2220;
-  --c-panel: #222e2a;
-  --c-panel-hover: #2a3832;
-  --c-ink: #e2e8e4;
-  --c-ink-muted: #9aaa9f;
-  --c-ink-faint: #6b7e72;
-  --c-green: #5ebd8a;
-  --c-green-hover: #7dd3a6;
-  --c-green-subtle: rgba(94, 189, 138, 0.1);
-  --c-line: #2e3e34;
-  --c-code-bg: #1e2a25;
-  --c-tag-bg: #253028;
+  --c-page: #1a1815;
+  --c-panel: #211f1b;
+  --c-panel-hover: #29261f;
+  --c-ink: #e9e4d8;
+  --c-ink-muted: #a79f90;
+  --c-ink-faint: #766f62;
+  --c-green: #8fb2db;
+  --c-green-hover: #abc7e8;
+  --c-green-subtle: rgba(143, 178, 219, 0.12);
+  --c-line: #2e2a24;
+  --c-code-bg: #201e19;
+  --c-tag-bg: #262219;
 }
 
 /* ──────────────────────────────────────────────
@@ -114,69 +114,79 @@ body {
   font-family: var(--font-body);
   background-color: var(--c-page);
   color: var(--c-ink);
-  line-height: 1.7;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
   background: var(--c-green);
-  color: #fff;
+  color: var(--c-page);
 }
 
 /* ──────────────────────────────────────────────
-   Prose (article body)
+   Prose (article body) — serif reading measure
    ────────────────────────────────────────────── */
 .prose {
-  font-size: 1.1rem;
-  line-height: 1.9;
+  font-family: var(--font-serif);
+  font-size: 1.1875rem;
+  line-height: 1.75;
+  color: var(--c-ink);
 }
 .prose > * + * {
-  margin-top: 1.5em;
+  margin-top: 1.4em;
 }
 .prose h2,
 .prose h3,
 .prose h4 {
-  font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 1.3;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--c-ink);
-  margin-top: 2.5em;
-  margin-bottom: 0.6em;
+  margin-top: 2.2em;
+  margin-bottom: 0.5em;
 }
 .prose h2 {
-  font-size: 1.6rem;
-  padding-bottom: 0.4em;
+  font-size: 1.75rem;
+  padding-bottom: 0.3em;
   border-bottom: 1px solid var(--c-line);
 }
 .prose h3 {
-  font-size: 1.3rem;
+  font-size: 1.375rem;
 }
 .prose h4 {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 600;
 }
 .prose p {
-  margin-bottom: 1.5em;
+  margin-bottom: 1.4em;
 }
 .prose a {
   color: var(--c-green);
   text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--c-green) 40%, transparent);
   text-underline-offset: 3px;
   text-decoration-thickness: 1px;
-  transition: color 0.2s;
+  transition:
+    color 0.2s,
+    text-decoration-color 0.2s;
 }
 .prose a:hover {
   color: var(--c-green-hover);
+  text-decoration-color: var(--c-green);
 }
 .prose strong {
-  font-weight: 700;
+  font-weight: 600;
   color: var(--c-ink);
 }
+/* Code is set in mono — drop back a notch to sit with the serif body. */
 .prose code {
   font-family: var(--font-mono);
-  font-size: 0.85em;
-  padding: 0.2em 0.45em;
+  font-size: 0.8em;
+  padding: 0.15em 0.4em;
   background: var(--c-code-bg);
   border-radius: 4px;
   border: 1px solid var(--c-line);
@@ -186,7 +196,7 @@ body {
   font-size: 0.85rem;
   line-height: 1.7;
   padding: 1.25em 1.5em;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid var(--c-line);
   overflow-x: auto;
 }
@@ -213,35 +223,36 @@ body {
 }
 .prose blockquote {
   border-left: 2px solid var(--c-green);
-  padding-left: 1.25em;
+  padding-left: 1.1em;
   margin-left: 0;
   color: var(--c-ink-muted);
   font-style: italic;
 }
 .prose ul,
 .prose ol {
-  padding-left: 1.5em;
+  padding-left: 1.4em;
 }
 .prose li {
-  margin-top: 0.4em;
+  margin-top: 0.35em;
 }
 .prose li::marker {
-  color: var(--c-green);
+  color: var(--c-ink-faint);
 }
 .prose img {
-  border-radius: 8px;
+  border-radius: 6px;
   max-width: 100%;
 }
 .prose table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.95em;
+  font-family: var(--font-sans);
+  font-size: 0.9em;
   display: block;
   overflow-x: auto;
 }
 .prose th,
 .prose td {
-  padding: 0.65em 1em;
+  padding: 0.6em 1em;
   border: 1px solid var(--c-line);
   text-align: left;
 }
@@ -256,32 +267,17 @@ body {
 }
 
 /* ──────────────────────────────────────────────
-   Post list item — grow underline on hover
+   Index rows — hover is just a quiet title color shift
+   (handled per-row via group-hover); no moving lines.
    ────────────────────────────────────────────── */
-.post-row {
-  position: relative;
-}
-.post-row::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 0;
-  height: 1px;
-  background: var(--c-green);
-  transition: width 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-.post-row:hover::after {
-  width: 100%;
-}
 
 /* ──────────────────────────────────────────────
-   Animations
+   Animations (kept minimal — hero reveal only)
    ────────────────────────────────────────────── */
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -296,28 +292,12 @@ body {
     opacity: 1;
   }
 }
-@keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
 
 .animate-fade-up {
-  animation: fade-up 0.5s ease-out both;
+  animation: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .animate-fade-in {
-  animation: fade-in 0.45s ease-out both;
-}
-
-.stagger > * {
-  opacity: 0;
-  animation: slide-in 0.45s ease-out forwards;
-  animation-delay: calc(var(--stagger-i, 0) * 50ms);
+  animation: fade-in 0.5s ease-out both;
 }
 
 /* ──────────────────────────────────────────────
@@ -351,7 +331,21 @@ body {
 :focus-visible {
   outline: 2px solid var(--c-green);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 3px;
+}
+
+/* ──────────────────────────────────────────────
+   Reduced motion
+   ────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ──────────────────────────────────────────────

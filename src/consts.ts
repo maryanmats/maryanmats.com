@@ -1,6 +1,6 @@
 export const SITE_TITLE = 'Maryan Mats';
 export const SITE_DESCRIPTION =
-  'Creative Engineer & TypeScript Devotee. I craft web interfaces with obsessive attention to detail and write about what I learn.';
+  'Maryan Mats — a frontend engineer writing about TypeScript, the browser, and building interfaces that hold up.';
 export const SITE_AUTHOR = 'Maryan Mats';
 export const SITE_EMAIL = 'matsmaryan@gmail.com';
 

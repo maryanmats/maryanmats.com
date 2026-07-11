@@ -11,7 +11,7 @@ const { posts = [] } = Astro.props;
   >
   </div>
   <div
-    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%] w-32 h-32 md:w-44 md:h-44 rounded-full bg-green/10 blur-[40px] md:blur-[50px] pointer-events-none"
+    class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%] w-32 h-32 md:w-44 md:h-44 rounded-full bg-green/8 blur-[40px] md:blur-[50px] pointer-events-none"
   >
   </div>
   <canvas
@@ -37,7 +37,7 @@ const { posts = [] } = Astro.props;
       <span class="w-1 h-1 rounded-full bg-green"></span>
       <span
         id="wireframe-card-label"
-        class="text-[9px] font-mono text-ink-faint uppercase tracking-widest"
+        class="text-[9px] font-mono text-ink-faint"
         >Latest post</span
       >
     </div>
@@ -62,7 +62,7 @@ const { posts = [] } = Astro.props;
 
   <p
     id="wireframe-hint"
-    class="text-center mt-2 text-[10px] md:text-[11px] font-mono text-green/40 tracking-wide select-none transition-opacity duration-300 h-4 md:h-5"
+    class="text-center mt-2 text-[10px] md:text-[11px] font-mono text-ink-faint select-none transition-opacity duration-300 h-4 md:h-5"
   >
     {posts.length > 0 ? 'click to explore' : 'no posts yet'}
   </p>
