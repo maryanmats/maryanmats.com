@@ -8,24 +8,26 @@ import {
   SITE_TITLE,
   SOCIAL_LINKS,
 } from '../consts';
+import { getPublishedPosts } from '../utils/posts';
 
-const SERVICES = [
+const OFFERINGS = [
   {
-    title: 'Frontend architecture & build',
+    title: 'Build',
+    kicker: 'Product & frontend work',
     description:
-      'Greenfield products or rescue work. React, Next.js, Astro, and TypeScript end to end — the framework, the types, and the edge cases most builds skip past.',
+      'Greenfield builds or rescue work — shipped, typed, and readable long after the project ends. React, Next.js, Astro, TypeScript. I use the current tooling to move quickly; the parts that decide whether it holds up still get a senior’s attention.',
   },
   {
-    title: 'Design systems & component libraries',
+    title: 'Advise',
+    kicker: 'Architecture, types & AI workflow',
     description:
-      'Typed, documented, and built to be read — the same care I put into the small libraries I ship alongside my writing.',
-  },
-  {
-    title: 'Consulting & code review',
-    description:
-      'A second pair of eyes on architecture, types, and the decisions that age badly. Short engagements, clear deliverables.',
+      'A second pair of eyes on architecture and types — and, increasingly, on how a team actually gets value out of AI tools like Claude Code without drowning the codebase in plausible-looking debt.',
   },
 ];
+
+const proofPosts = (await getPublishedPosts())
+  .filter((p) => p.data.tags?.includes('claude-code'))
+  .slice(0, 2);
 ---
 
 <BaseLayout
@@ -41,9 +43,9 @@ const SERVICES = [
         Work with me
       </h1>
       <p class="font-serif text-lg md:text-xl text-ink-muted leading-relaxed max-w-xl mb-6">
-        I take on a small number of freelance projects each year — the kind
-        where the frontend is the hard part and the details decide whether it
-        holds up.
+        I'm a senior frontend engineer — TypeScript, React, Next.js, Astro. I
+        build products and advise teams on the frontend, and I take on a small
+        number of engagements a year.
       </p>
       {
         AVAILABILITY.open && (
@@ -60,15 +62,18 @@ const SERVICES = [
       <h2 class="text-body-sm text-ink-muted mb-6">What I do</h2>
       <div class="border-t border-line">
         {
-          SERVICES.map((s) => (
+          OFFERINGS.map((o) => (
             <div class="py-7 border-b border-line flex flex-col md:flex-row gap-2 md:gap-8">
               <div class="md:w-56 shrink-0">
                 <h3 class="font-serif text-xl font-500 text-ink leading-tight">
-                  {s.title}
+                  {o.title}
                 </h3>
+                <p class="text-mini font-mono text-ink-faint mt-1.5">
+                  {o.kicker}
+                </p>
               </div>
               <p class="flex-1 font-serif text-lg text-ink-muted leading-relaxed max-w-xl">
-                {s.description}
+                {o.description}
               </p>
             </div>
           ))
@@ -81,23 +86,54 @@ const SERVICES = [
       <h2 class="text-body-sm text-ink-muted mb-6">How I work</h2>
       <div class="font-serif text-lg text-ink leading-relaxed space-y-4 max-w-xl">
         <p>
-          Remote, in your team's overlap hours. I keep scope small and
-          deliverables clear — typed, tested, and documented well enough that the
-          next person can read it.
+          Small scope, clear deliverables, typed and tested — code the next
+          person can read. I use AI tooling heavily but review every line like a
+          senior; nothing ships because it looked right.
         </p>
         <p>
-          Most projects start with a short call or a few emails to work out
-          whether it's a good fit. No obligation on either side.
+          I work remotely from Ukraine, in your team's overlap hours. Everything
+          on this site is written by me — which is about the bar for how I'll
+          communicate on your project.
         </p>
       </div>
     </section>
+
+    <!-- Selected writing -->
+    {
+      proofPosts.length > 0 && (
+        <section class="mb-14">
+          <h2 class="text-body-sm text-ink-muted mb-6">See how I think</h2>
+          <p class="font-serif text-lg text-ink-muted leading-relaxed max-w-xl mb-6">
+            No testimonials wall — just a blog, on how I build and how I work
+            with these tools. A place to start:
+          </p>
+          <ul class="border-t border-line max-w-xl">
+            {proofPosts.map((post) => (
+              <li>
+                <a
+                  href={`/blog/${post.id}/`}
+                  class="group flex items-baseline justify-between gap-4 py-4 border-b border-line no-underline"
+                >
+                  <span class="font-serif text-lg font-500 text-ink group-hover:text-green transition-colors duration-200">
+                    {post.data.title}
+                  </span>
+                  <span class="shrink-0 text-ink-faint group-hover:text-green group-hover:translate-x-0.5 transition-all duration-200">
+                    &rarr;
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
 
     <!-- Start a project -->
     <section>
       <h2 class="text-body-sm text-ink-muted mb-6">Start a project</h2>
       <p class="font-serif text-lg text-ink-muted leading-relaxed max-w-xl mb-6">
-        Tell me what you're building, the rough scope, and your timeline. Email
-        is best — I usually reply within a day or two.
+        Tell me what you're building or what your team needs, the rough scope,
+        and your timeline. Email's best; I usually reply within a day or two.
       </p>
       <a
         href={`mailto:${SITE_EMAIL}`}
