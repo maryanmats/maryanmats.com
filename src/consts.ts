@@ -9,7 +9,13 @@ export const NAV_LINKS = [
   { href: '/blog', label: 'Blog' },
   { href: '/projects', label: 'Projects' },
   { href: '/about', label: 'About' },
+  { href: '/work', label: 'Work' },
 ] as const;
+
+export const AVAILABILITY = {
+  open: true,
+  label: 'Available for select freelance work',
+} as const;
 
 export const SOCIAL_LINKS = [
   {

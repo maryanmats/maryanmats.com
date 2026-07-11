@@ -3,6 +3,7 @@ import type { CollectionEntry } from 'astro:content';
 import Breadcrumbs from '../components/Breadcrumbs.astro';
 import CopyCodeButton from '../components/CopyCodeButton.astro';
 import FormattedDate from '../components/FormattedDate.astro';
+import PostCta from '../components/PostCta.astro';
 import PostNavigation from '../components/PostNavigation.astro';
 import ShareButton from '../components/ShareButton.astro';
 import TableOfContents from '../components/TableOfContents.astro';
@@ -164,6 +165,8 @@ const {
         )
       }
     </div>
+
+    <PostCta />
 
     <PostNavigation prev={prev} next={next} />
 

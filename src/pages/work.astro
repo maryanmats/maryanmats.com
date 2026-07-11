@@ -1,0 +1,131 @@
+---
+import Breadcrumbs from '../components/Breadcrumbs.astro';
+import Icon from '../components/Icon.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import {
+  AVAILABILITY,
+  SITE_EMAIL,
+  SITE_TITLE,
+  SOCIAL_LINKS,
+} from '../consts';
+
+const SERVICES = [
+  {
+    title: 'Frontend architecture & build',
+    description:
+      'Greenfield products or rescue work. React, Next.js, Astro, and TypeScript end to end — the framework, the types, and the edge cases most builds skip past.',
+  },
+  {
+    title: 'Design systems & component libraries',
+    description:
+      'Typed, documented, and built to be read — the same care I put into the small libraries I ship alongside my writing.',
+  },
+  {
+    title: 'Consulting & code review',
+    description:
+      'A second pair of eyes on architecture, types, and the decisions that age badly. Short engagements, clear deliverables.',
+  },
+];
+---
+
+<BaseLayout
+  title={`Work with me — ${SITE_TITLE}`}
+  description="Freelance frontend work — React, Next.js, TypeScript, and design systems, built to last."
+>
+  <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
+    <Breadcrumbs items={[{ label: 'Home', href: '/' }]} current="Work" />
+
+    <header class="mb-14 animate-fade-up">
+      <p class="text-body-sm text-ink-faint mb-4">Work</p>
+      <h1 class="font-serif text-4xl md:text-5xl font-500 tracking-[-0.015em] text-ink mb-5">
+        Work with me
+      </h1>
+      <p class="font-serif text-lg md:text-xl text-ink-muted leading-relaxed max-w-xl mb-6">
+        I take on a small number of freelance projects each year — the kind
+        where the frontend is the hard part and the details decide whether it
+        holds up.
+      </p>
+      {
+        AVAILABILITY.open && (
+          <p class="inline-flex items-center gap-2 text-body-sm text-ink-muted">
+            <span class="w-1.5 h-1.5 rounded-full bg-green" />
+            {AVAILABILITY.label}
+          </p>
+        )
+      }
+    </header>
+
+    <!-- What I do -->
+    <section class="mb-14">
+      <h2 class="text-body-sm text-ink-muted mb-6">What I do</h2>
+      <div class="border-t border-line">
+        {
+          SERVICES.map((s) => (
+            <div class="py-7 border-b border-line flex flex-col md:flex-row gap-2 md:gap-8">
+              <div class="md:w-56 shrink-0">
+                <h3 class="font-serif text-xl font-500 text-ink leading-tight">
+                  {s.title}
+                </h3>
+              </div>
+              <p class="flex-1 font-serif text-lg text-ink-muted leading-relaxed max-w-xl">
+                {s.description}
+              </p>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <!-- How I work -->
+    <section class="mb-14">
+      <h2 class="text-body-sm text-ink-muted mb-6">How I work</h2>
+      <div class="font-serif text-lg text-ink leading-relaxed space-y-4 max-w-xl">
+        <p>
+          Remote, in your team's overlap hours. I keep scope small and
+          deliverables clear — typed, tested, and documented well enough that the
+          next person can read it.
+        </p>
+        <p>
+          Most projects start with a short call or a few emails to work out
+          whether it's a good fit. No obligation on either side.
+        </p>
+      </div>
+    </section>
+
+    <!-- Start a project -->
+    <section>
+      <h2 class="text-body-sm text-ink-muted mb-6">Start a project</h2>
+      <p class="font-serif text-lg text-ink-muted leading-relaxed max-w-xl mb-6">
+        Tell me what you're building, the rough scope, and your timeline. Email
+        is best — I usually reply within a day or two.
+      </p>
+      <a
+        href={`mailto:${SITE_EMAIL}`}
+        class="group inline-flex items-center gap-2.5 rounded-lg border border-line bg-panel px-5 py-3 font-mono text-body-sm text-ink no-underline transition-colors hover:border-green hover:text-green"
+      >
+        <Icon name="mail" class="w-4 h-4" />
+        {SITE_EMAIL}
+      </a>
+      <div class="mt-8">
+        <p class="text-body-sm text-ink-faint mb-3">Or find me on</p>
+        <ul class="flex flex-wrap gap-x-6 gap-y-2">
+          {
+            SOCIAL_LINKS.map((link) => (
+              <li>
+                <a
+                  href={link.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-flex items-center gap-2 text-body-sm text-ink-muted hover:text-green no-underline transition-colors"
+                >
+                  <Icon name={link.icon} class="w-3.5 h-3.5" />
+                  {link.label}
+                </a>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+  </div>
+</BaseLayout>

@@ -5,7 +5,7 @@ import Icon from '../components/Icon.astro';
 import PostRow from '../components/PostRow.astro';
 import WireframeCanvas from '../components/WireframeCanvas.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { SITE_DESCRIPTION, SITE_TITLE, TECH_STACK } from '../consts';
+import { AVAILABILITY, SITE_DESCRIPTION, SITE_TITLE, TECH_STACK } from '../consts';
 import { getPublishedPosts } from '../utils/posts';
 import { getReadingTime } from '../utils/reading-time';
 
@@ -38,6 +38,26 @@ const projects = (await getCollection('projects')).sort(
               <span class="text-body-sm text-ink-faint">{t}</span>
             ))
           }
+        </div>
+        <div class="mt-10 flex flex-wrap items-center gap-x-5 gap-y-3">
+          {
+            AVAILABILITY.open && (
+              <span class="inline-flex items-center gap-2 text-body-sm text-ink-muted">
+                <span class="w-1.5 h-1.5 rounded-full bg-green" />
+                {AVAILABILITY.label}
+              </span>
+            )
+          }
+          <a
+            href="/work"
+            class="group inline-flex items-center gap-1.5 text-body-sm text-ink no-underline transition-colors hover:text-green"
+          >
+            Work with me
+            <span
+              class="transition-transform duration-200 group-hover:translate-x-0.5"
+              >&rarr;</span
+            >
+          </a>
         </div>
       </div>
       <div class="flex-shrink-0 animate-fade-in" style="animation-delay: 200ms;">
@@ -165,6 +185,29 @@ const projects = (await getCollection('projects')).sort(
           </a>
         ))
       }
+    </div>
+  </section>
+
+  <!-- Work with me -->
+  <section class="max-w-5xl mx-auto px-6 py-16 border-t border-line">
+    <div class="max-w-2xl">
+      <h2 class="text-body-sm text-ink-muted mb-5">Work with me</h2>
+      <p
+        class="font-serif text-2xl md:text-[1.75rem] font-500 leading-[1.2] tracking-[-0.01em] text-ink mb-6"
+      >
+        I take on a few freelance projects a year — the kind where the frontend
+        is the hard part.
+      </p>
+      <a
+        href="/work"
+        class="group inline-flex items-center gap-1.5 text-body-sm text-ink no-underline transition-colors hover:text-green"
+      >
+        What I do &amp; how to reach me
+        <span
+          class="transition-transform duration-200 group-hover:translate-x-0.5"
+          >&rarr;</span
+        >
+      </a>
     </div>
   </section>
 </BaseLayout>
