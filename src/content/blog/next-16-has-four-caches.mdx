@@ -1,0 +1,325 @@
+---
+title: "Next.js 16 Has Four Caches. Here's Which One Broke Your Page."
+description: "Cache Components replaced implicit caching with four explicit layers that quietly disagree with each other. Real build output and response headers from a lab app on 16.2.11 — the cache key you didn't write, lifetimes that leak upward, and the symptom-to-layer table I use to find which one is lying."
+pubDate: 2026-07-25T10:00:00
+tags: ["nextjs", "react", "caching", "cache-components", "ppr", "server-components", "web-development"]
+draft: false
+---
+
+Two pages in my lab app ended up with different cache lifetimes:
+
+```
+Route (app)           Revalidate  Expire
+├ ○ /nested                   1m      1h
+├ ○ /nested-explicit          1h      1d
+```
+
+Same markup, same data, both starting with `'use cache'`. The second one sets `cacheLife('hours')`. The first sets nothing — and quietly inherited a one-minute lifetime from a component it imports. Nothing in that page's own source says it revalidates sixty times more often than its neighbour. Now swap that component for one from a shared package you don't own, and your page's cache lifetime becomes somebody else's patch release.
+
+That's not a bug. It's the rule — one of several you now have to hold in your head at once, because Next.js 16 doesn't have a cache. It has four, and they don't agree about what "cached" means.
+
+Everything below comes from a lab app I built for this post: `next@16.2.11` (the current stable — `16.3` is still canary), `cacheComponents: true`, Node 24, production builds. Every build table, error message and response header is pasted verbatim from that app. Where I'm relying on documented behaviour I couldn't reproduce locally, I say so explicitly.
+
+## The four caches
+
+Cache Components flipped the default. Where the App Router used to cache implicitly and leave you to opt out, nothing is cached now unless you ask for it with `'use cache'`. What the announcement doesn't dwell on is that opting in adds a layer without removing the old ones. The migration guide puts it in one line: *"Your existing `fetch` and `unstable_cache` caching keeps working as a separate layer."*
+
+So here's the actual map:
+
+| Layer | Where it lives | Lifetime | What clears it |
+| --- | --- | --- | --- |
+| Request memoization — `React.cache`, `fetch` dedupe | memory, one render pass | the request | nothing; it dies with the render |
+| `use cache` entries | in-memory LRU on the server instance, or a cache handler | `cacheLife`: `stale` / `revalidate` / `expire` | `updateTag`, `revalidateTag`, a deploy, an instance restart |
+| `fetch` Data Cache and `unstable_cache` | Next's data cache — survives deploys and instances | `next: { revalidate }` / options | `revalidateTag`, `revalidatePath` |
+| Client Router Cache | the browser's memory | `stale`, with a 30-second floor | any `revalidateTag` / `revalidatePath` / `updateTag` / `refresh` called from a Server Action — it clears **all** of it |
+
+There's a fifth surface, but it isn't yours to configure: the prerendered shell and whatever your CDN does with the `Cache-Control` headers the other four produce. You'll see it below, because it's the easiest place to watch the rest of them leak.
+
+One detail that catches people who reach for the familiar tool: `React.cache` is *isolated* inside a `use cache` scope. A value you store outside is not visible inside. You cannot use it to smuggle request data past the boundary, which is exactly what someone tries the first time they hit the next section.
+
+## Three numbers, three different audiences
+
+`cacheLife` takes three properties, and the reason they're confusing is that each one talks to a different machine.
+
+- **`stale`** is the browser. How long the client router shows you what it already has without asking the server.
+- **`revalidate`** is the server. After this, the next request is served from cache *and* triggers a background refresh.
+- **`expire`** is the failure mode. If nobody visits for this long, the cache is too old to serve, and the next visitor waits.
+
+The presets, from the docs:
+
+| Profile | `stale` | `revalidate` | `expire` |
+| --- | --- | --- | --- |
+| `default` | 5 min | 15 min | never |
+| `seconds` | 30 sec | 1 sec | 1 min |
+| `minutes` | 5 min | 1 min | 1 hour |
+| `hours` | 5 min | 1 hour | 1 day |
+| `days` | 5 min | 1 day | 1 week |
+| `weeks` | 5 min | 1 week | 30 days |
+| `max` | 5 min | 30 days | 1 year |
+
+Those aren't abstractions — they end up on the wire. A page with `cacheLife('hours')`, served by `next start`:
+
+```bash
+$ curl -sSI localhost:3999/hours | grep -iE "x-nextjs|cache-control"
+x-nextjs-cache: HIT
+x-nextjs-prerender: 1
+x-nextjs-stale-time: 300
+Cache-Control: s-maxage=3600, stale-while-revalidate=82800
+```
+
+`s-maxage=3600` is the one-hour revalidate. Add the SWR window and you get `3600 + 82800 = 86400` — the one-day expire, to the second. `x-nextjs-stale-time: 300` is the five-minute client stale, which the router reads to decide whether it needs to ask you anything at all.
+
+Now the interesting one. This page sets `cacheLife({ stale: 5 })` and nothing else:
+
+```bash
+$ curl -sSI localhost:3999/stale | grep -iE "x-nextjs|cache-control"
+x-nextjs-stale-time: 5
+Cache-Control: s-maxage=900, stale-while-revalidate=31535100
+```
+
+Two things fall out of that. First, an inline profile inherits everything you didn't specify from `default`, so revalidate is still 15 minutes (`s-maxage=900`) even though I clearly cared about freshness. Second — `900 + 31535100 = 31536000`. That's 365 days. The `default` profile's `expire: never` is, in practice, a year.
+
+And the floor: the docs say the client router enforces a minimum 30-second stale time regardless of configuration, so that prefetched links don't expire before anyone can click them. My server still sent `5`. The header carries what you asked for; the 30-second minimum is applied on the client. I didn't instrument a browser to watch it, so I'm reporting the documented rule and the header I actually saw — but the practical consequence is worth stating plainly: **you cannot configure a client-side freshness below 30 seconds.** If your UI needs faster than that, it isn't a caching problem, it's a client-fetching problem.
+
+## The cache key you didn't write
+
+The cache key for a `use cache` function is generated from the build ID, a hash of the function's location and signature, its serializable arguments — and, quietly, *every variable it captures from an outer scope*.
+
+That last part is easy to read past, so I made it visible. Three rows, one cached function, a module-level counter that only increments on a real execution:
+
+```jsx
+let executions = 0;
+
+async function Row({ tenant }) {
+  const load = async (region) => {
+    'use cache';
+    executions += 1;
+    return `${tenant}/${region} — execution #${executions}`;
+  };
+
+  return <li>{await load('eu')}</li>;
+}
+
+export default function Page() {
+  return (
+    <ul>
+      <Row tenant="acme" />
+      <Row tenant="globex" />
+      <Row tenant="acme" />
+    </ul>
+  );
+}
+```
+
+`load` takes exactly one argument. It never mentions `tenant`. Here's the prerendered HTML:
+
+```html
+<li>acme/eu — execution #1</li>
+<li>globex/eu — execution #2</li>
+<li>acme/eu — execution #1</li>
+```
+
+Three calls, two executions. `tenant` was captured from the closure and folded into the key, so `acme` and `globex` got separate entries and the second `acme` was a hit. This is the behaviour you want — it's what makes parameterized caching work without a key-parts array, which is the ceremony `unstable_cache` needed.
+
+It's also the behaviour that fills your cache with garbage. A cached function defined inside a component sees everything that component has in scope. Capture a session object, a user id, a request-scoped config, and you've turned one cache entry into one entry *per user*, silently, with no line of code saying so. On serverless that's usually just waste. In a long-lived server it's a memory profile nobody predicted.
+
+The defensive habit is small: define cached functions at module scope and pass what they need as arguments. Then the key is the signature, and the signature is visible. The docs frame the same problem from the other side, as cache utilization — key on the dimension with few unique values (a language, a category), not the one with thousands (a user id, a price filter), and filter the rest in memory.
+
+Two related constraints bite in the same place. Arguments and return values use *different* serialization: arguments go through Server Component serialization, returns through Client Component serialization. So you can return JSX but not accept it — except as a pass-through you never inspect, which is how `children` composition survives a cached wrapper. And the unsupported list has one genuinely surprising member alongside class instances, functions and symbols: **`URL` instances**. A `URL` looks like data and isn't.
+
+## Lifetimes leak upward
+
+Back to the two rows from the top of the post. Here's the whole setup:
+
+```jsx
+// app/nested/widget.js
+import { cacheLife } from 'next/cache';
+
+export async function TickerWidget() {
+  'use cache';
+  cacheLife('minutes');
+  return <span>{new Date().toISOString()}</span>;
+}
+```
+
+```jsx
+// app/nested/page.js  — no cacheLife
+import { TickerWidget } from './widget';
+
+export default async function Page() {
+  'use cache';
+  return (
+    <main>
+      <h1>Dashboard</h1>
+      <TickerWidget />
+    </main>
+  );
+}
+```
+
+`/nested-explicit` is the same file with one line added: `cacheLife('hours')` under the directive. That's the entire difference between these two rows:
+
+```
+Route (app)           Revalidate  Expire
+├ ○ /nested                   1m      1h
+├ ○ /nested-explicit          1h      1d
+```
+
+Without an explicit `cacheLife`, the outer cache starts at `default` and a shorter inner lifetime pulls it down. With an explicit one, the outer wins outright. The rule is asymmetric in a way that's easy to misremember: a *shorter* inner cache can shrink an unconfigured outer cache, but a *longer* one can't stretch it past the default.
+
+And it doesn't stop at the build table. The propagated lifetime is on the response:
+
+```bash
+$ curl -sSI localhost:3999/nested | grep -i cache-control
+Cache-Control: s-maxage=60, stale-while-revalidate=3540
+```
+
+A one-minute CDN policy for a dashboard page, decided by an imported widget. Now imagine the widget isn't yours — it's in a shared package, and someone tightens its `cacheLife` in a patch release.
+
+Push it one step further and it stops being subtle. Change that widget to `cacheLife('seconds')` and the build fails:
+
+```
+Error: A "use cache" with short `expire` (under 5 minutes) is nested inside another
+"use cache" that has no explicit `cacheLife`, which is not allowed during prerendering.
+Add `cacheLife()` to the outer `"use cache"` to choose whether it should be prerendered
+(with longer `expire`) or remain dynamic (with short `expire`).
+```
+
+Which is Next.js refusing to guess. I'd rather have the error than the silent version — but note that the error is the *only* place this shows up. The `minutes` case above compiles happily and just changes your traffic profile.
+
+So: **put an explicit `cacheLife` on every cached page and layout.** Not because the default is wrong, but because it makes the page's lifetime a property of the page instead of a property of its import graph.
+
+## `seconds` isn't a cache. It's a hole.
+
+This is the rule that surprised me most, and it's stated in one line of the `cacheLife` reference: caches with a zero `revalidate` or an `expire` under five minutes are excluded from prerendering and become dynamic holes. The `seconds` profile qualifies.
+
+"Excluded from prerendering" sounds like a performance note. In a build it's a hard failure. Same page, one word changed:
+
+```jsx
+export default async function Page() {
+  'use cache';
+  cacheLife('seconds');   // was: cacheLife('hours')
+  return <p>rendered at {new Date().toISOString()}</p>;
+}
+```
+
+```
+Error: Route "/seconds": Uncached data was accessed outside of <Suspense>.
+This delays the entire page from rendering, resulting in a slow user experience.
+Learn more: https://nextjs.org/docs/messages/blocking-route
+```
+
+*Uncached* — for a function I explicitly marked as cached. From the prerenderer's point of view that's exactly right: a cache that may be one second old can't be baked into a static shell, so it's request-time data, and request-time data outside a `Suspense` boundary blocks the whole route. The identical page with `cacheLife('hours')` prerenders without complaint.
+
+Wrap it in `Suspense` and the route changes category:
+
+```
+├ ○ /hours                    1h      1d
+├ ◐ /seconds
+
+○  (Static)             prerendered as static content
+◐  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content
+```
+
+No revalidate, no expire — there's nothing to schedule, because the shell is static and the short-lived part streams at request time. That's Partial Prerendering, which is no longer a flag you turn on; `cacheComponents` removed `experimental.ppr` and made it the default rendering model. The response tells the same story:
+
+```bash
+$ curl -sSI localhost:3999/seconds | grep -iE "x-nextjs|cache-control"
+x-nextjs-stale-time: 300
+x-nextjs-prerender: 1
+x-nextjs-postponed: 1
+Cache-Control: private, no-cache, no-store, max-age=0, must-revalidate
+```
+
+`x-nextjs-postponed: 1` is the marker for a route with a postponed dynamic part, and the `no-store` is the CDN being told to stay out of it. A page that was fully CDN-cacheable a minute ago now isn't — because one nested component wanted second-level freshness.
+
+## Three ways to invalidate, three different promises
+
+This is where most "the data didn't update" bugs actually live, because the three APIs look interchangeable and aren't.
+
+```ts
+revalidateTag('posts', 'max');   // stale-while-revalidate
+updateTag('posts');              // read-your-writes, Server Actions only
+refresh();                       // uncached data only, Server Actions only
+```
+
+`revalidateTag` now takes a `cacheLife` profile as a second argument; the single-argument form is deprecated. With `'max'` it marks the tag stale and serves the old value while refreshing behind the scenes. The docs are refreshingly blunt about what that means for timing: *"fresh data is only fetched when pages using that tag are next visited."* Nothing happens at the moment you call it.
+
+`updateTag` is the one you want after a form submit. It expires the tag so the *next request in that same flow* waits for fresh data — read-your-own-writes, which is what a user expects after clicking Save. It only works inside a Server Action; call it from a Route Handler and it throws. For webhooks, you're back to `revalidateTag(tag, 'max')`, or `revalidateTag(tag, { expire: 0 })` when an external system genuinely needs immediate expiry.
+
+`refresh()` touches no cache at all. It re-renders the uncached parts of the page — notification counts, live status — while your cached shell stays put.
+
+The one that surprises everyone: any of these, called from a Server Action, **clears the entire client router cache immediately**, bypassing `stale`. So a narrowly-tagged server invalidation is a blunt instrument on the client. If you've been debugging why an unrelated page refetched after a save, that's why.
+
+Rules I use:
+
+- Form submit, user must see their change → `updateTag`.
+- Webhook or CMS publish → `revalidateTag(tag, 'max')`.
+- The number in the header is wrong but nothing is cached → `refresh()`.
+- You're tagging fetches instead of cached functions → `cacheTag()` inside `use cache`, and note the tag is case-sensitive with a 256-character limit.
+
+## The trade the migration guide mentions once
+
+Here's the part I'd want to know before a migration, and it's a single paragraph in the official guide:
+
+> The `fetch` Data Cache persists cached responses across deployments and across serverless instances. `use cache` defaults to in-memory storage, so its entries are discarded when the serverless instance is destroyed and are scoped to a single deployment.
+
+The same guide shows `unstable_cache` → `use cache` as a clean before/after refactor. Mechanically it is one. In durability terms it is not: `unstable_cache` and `fetch` both write to a store that survives deploys and instances, while `use cache` defaults to an in-memory LRU that belongs to one process. On serverless, where a request can land on a cold instance, the docs are explicit that a cached function "may re-evaluate on every request."
+
+I want to be precise about the limits of my own evidence here: I ran everything above locally against `next start`, which is a persistent process — the serverless behaviour is documented, not measured by me. But the mechanism isn't mysterious. In-memory means in *that* memory.
+
+The practical consequence is that "replace `unstable_cache` with `use cache`" is the right refactor only when what you're caching is cheap to recompute or you've given it durable storage. If a cached call is expensive — a slow third-party API, a report query — reach for `'use cache: remote'` or a configured cache handler, and accept the round-trip and the platform bill that come with it. Don't do the swap because the guide's diff looks tidy.
+
+The `'use cache: remote'` reference is admirably blunt about what in-memory means: entries get evicted to make room for others, memory is constrained by your deployment environment, and the cache doesn't persist "across requests or server restarts." It also tells you when *not* to reach for remote storage — operations already under 50ms, or keys with mostly unique values per request, where your hit rate would be near zero anyway.
+
+The other escape hatch is `'use cache: private'`, which lets a cached function read `cookies()`, `headers()` and `searchParams` directly. The catch is in the name: it's never stored on the server, only in the browser's memory, and it doesn't survive a reload. It's also still flagged experimental, because it depends on runtime prefetching that hasn't stabilized. Compliance cases and un-refactorable code, not a default.
+
+While we're on constraints: `runtime = 'edge'` isn't supported with Cache Components, `generateStaticParams` can no longer return an empty array, and `cookies()` called directly inside a cached scope fails immediately with a message that tells you the fix:
+
+```
+Error: Route /cookie-inside used `cookies()` inside "use cache". Accessing Dynamic data
+sources inside a cache scope is not supported. If you need this data inside a cached
+function use `cookies()` outside of the cached function and pass the required dynamic
+data in as an argument.
+```
+
+That one is a good error. The bad version is when you pass the *promise* instead of the value — then nothing fails fast, the build hangs, and fifty seconds later you get a timeout complaining about request-specific arguments inside `use cache`.
+
+## The client caches too — and now it remembers your form
+
+The layer people forget is the one in the browser, and in Next 16 it got a second, stranger job.
+
+With `cacheComponents` enabled, navigating away from a route no longer unmounts it. Next.js wraps routes in React's `Activity` component in `"hidden"` mode, so `useState`, form inputs and scroll position survive the trip and are still there when you come back. Effects clean up and re-run; state doesn't reset.
+
+That is a genuinely nice default, and it also breaks a class of code that relied on unmounting as a reset mechanism. A [migration thread on the Next.js repo](https://github.com/vercel/next.js/discussions/89160) works through a good example: a form that stops restoring its default value as you navigate between two routes, and — my favourite — a radio group that collides with itself. Two route instances sit in the DOM at once, both rendering `<input name="commercial-property-type">`, and per the HTML spec radios sharing a `name` outside a `form` element belong to one group across the whole document. Two instances, four radios, conflicting checked states.
+
+The maintainer's conclusion in that thread is the line I'd repeat to a team: *"`cacheComponents`/Activity didn't cause these bugs - it makes them visible."* The original code was held together by coincidences — an effect that pushed the router, a comparison that was always true, and a router that deduplicated the resulting no-op. Activity put two live instances on screen and the accident stopped working.
+
+The fixes are unglamorous. Derive dialog and dropdown state from the URL instead of local state. Reset forms in the submit handler rather than trusting the unmount. Close popovers in a `useLayoutEffect` cleanup. And when a control must exist exactly once on the page, hoist it into a shared layout instead of letting each route render its own copy. If you've read [why Zustand breaks in Next.js](/blog/why-zustand-breaks-in-nextjs), it's the same shape of problem one layer up: state whose lifetime you never actually specified, outliving the thing you assumed would clear it.
+
+Two smaller client-side facts to file away: `staleTimes` — the config that sets router cache defaults, 0 seconds for dynamic and 5 minutes for static — is still flagged experimental in the current docs, and changing `staleTimes.static` also moves the `default` profile's `stale`. They're one knob wearing two labels.
+
+## Which cache is lying to you
+
+This is the table I actually wanted when I started, organized by what you see rather than by which API is involved.
+
+| Symptom | Layer | Where to look |
+| --- | --- | --- |
+| Saved a record, hard-refreshed, still the old value | `use cache` | Missing `cacheTag`, or `revalidateTag` used where `updateTag` was needed |
+| Updated after a mutation, but stale when navigating back via a link | Client Router Cache | `stale` time, 30-second floor |
+| Fine locally, randomly stale or slow in production | `use cache` storage | In-memory LRU per instance; needs `use cache: remote` or a handler |
+| Cache "resets" after every deploy | `use cache` | The build ID is part of every key |
+| One user sees another user's data | Cache key | A dimension that should be in the key (user, tenant, locale) isn't — or the data belongs in `use cache: private` |
+| Page silently revalidates far more often than configured | Nested `cacheLife` | An imported component with a shorter profile; the outer has no explicit `cacheLife` |
+| Build fails: "Uncached data was accessed outside of `<Suspense>`" | Prerender | Request-time data, or a cache with `expire` under 5 minutes |
+| Build hangs, then times out after ~50s | Prerender | A request-time promise awaited inside `use cache` |
+| Form fields or dropdowns keep their state after navigation | Client, `Activity` | Reset explicitly; derive from the URL |
+| CDN suddenly stops caching a page | PPR | A dynamic hole made the route partially prerendered — check for `x-nextjs-postponed` |
+
+## What I'd actually do on Monday
+
+Cache Components is a better model than what it replaces. Explicit beats implicit, and I'll take four honest caches over one cache with five undocumented moods. But the model asks something in return: you have to know which layer you're standing on before you change anything, and the tooling for that is less obvious than the API surface.
+
+Three habits carried me through the lab, and I'd start any real migration with them. Put an explicit `cacheLife` on every cached page and layout, so lifetimes stop travelling through the import graph. Read the build table after every change — the `Revalidate`/`Expire` columns and the `○` / `◐` markers are the cheapest correctness check in the framework. And when something looks stale, `curl -I` the route before you touch code: `x-nextjs-stale-time`, `x-nextjs-postponed` and `Cache-Control` will tell you which of the four you're arguing with, usually in less time than it takes to add a `console.log`.
+
+The caching bug you can name is nearly always faster to fix than the one you can only feel.
