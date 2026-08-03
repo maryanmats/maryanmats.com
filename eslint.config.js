@@ -12,10 +12,11 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "*.mjs"],
     languageOptions: {
       globals: {
         Buffer: "readonly",
+        URL: "readonly",
         URLSearchParams: "readonly",
         console: "readonly",
         fetch: "readonly",
