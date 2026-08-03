@@ -15,6 +15,7 @@ interface Props {
     tags?: string[];
   };
   withReadingProgress?: boolean;
+  noindex?: boolean;
 }
 
 const {
@@ -23,6 +24,7 @@ const {
   ogImage,
   article,
   withReadingProgress = false,
+  noindex,
 } = Astro.props;
 ---
 
@@ -34,6 +36,7 @@ const {
       description={description}
       ogImage={ogImage}
       article={article}
+      noindex={noindex}
     />
   </head>
   <body class="bg-page text-ink min-h-screen flex flex-col">

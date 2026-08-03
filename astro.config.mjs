@@ -10,7 +10,10 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   site: 'https://maryanmats.com',
   prefetch: true,
-  integrations: [mdx(), sitemap()],
+  integrations: [
+    mdx(),
+    sitemap({ filter: (page) => !page.includes('/blog/tag/') }),
+  ],
 
   markdown: {
     shikiConfig: {

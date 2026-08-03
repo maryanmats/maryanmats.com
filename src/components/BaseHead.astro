@@ -12,10 +12,11 @@ interface Props {
     modifiedTime?: string;
     tags?: string[];
   };
+  noindex?: boolean;
 }
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
-const { title, description, ogImage, article } = Astro.props;
+const { title, description, ogImage, article, noindex } = Astro.props;
 
 const socialImage = new URL(ogImage ?? '/og.png', Astro.site).toString();
 const siteUrl = Astro.site?.toString();
@@ -104,6 +105,7 @@ const jsonLd = article
 </script>
 
 <link rel="canonical" href={canonicalURL} />
+{noindex && <meta name="robots" content="noindex, follow" />}
 
 <title>{title}</title>
 <meta name="title" content={title} />

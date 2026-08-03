@@ -23,6 +23,7 @@ const { tag, posts } = Astro.props;
 <BaseLayout
   title={`${tag} — ${SITE_TITLE}`}
   description={`Articles tagged "${tag}".`}
+  noindex
 >
   <div class="max-w-5xl mx-auto w-full px-6 py-14 md:py-20">
     <Breadcrumbs
