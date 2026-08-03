@@ -1,0 +1,163 @@
+---
+title: 'I Recommended Skills. Then I Measured Them.'
+description: "Two posts ago I told you to move CLAUDE.md into skills, because skills only load when you need them. Then I measured mine across 84 headless agent runs: 7,778 tokens of index before I type a word, a retrieval turn that costs more than the file it replaced, and 28 out of 28 unprompted invocations that refuse to reproduce the eval everyone is quoting."
+pubDate: 2026-08-03T10:00:00
+tags:
+  [
+    'claude-code',
+    'ai',
+    'llm',
+    'context-engineering',
+    'agent-skills',
+    'developer-tools',
+    'agentic-coding',
+  ]
+draft: false
+---
+
+Same machine, same prompt, one flag apart:
+
+```bash
+$ claude -p "Reply with the single word: ok" --model sonnet --output-format json
+# prompt tokens: 34,613
+
+$ claude -p "Reply with the single word: ok" --model sonnet --output-format json \
+    --disable-slash-commands
+# prompt tokens: 26,835
+```
+
+That flag's help text is one line: *"Disable all skills."* So on this laptop, knowing which skills exist costs **7,778 tokens on every request** — before the model has read a file, before I've typed anything but `ok`. I ran the pair three times; both numbers came back identical to the token each time.
+
+I have a specific reason to care about that number. Two posts ago I wrote that [your `CLAUDE.md` is a tax you pay on every token](/blog/your-claude-md-is-a-tax), and the fix I recommended — with some confidence, having measured nothing — was to move the big stuff into skills, because a skill costs "a few dozen tokens" until it's actually used. That's the pitch everyone repeats, Anthropic's docs included.
+
+This post is what happened when I checked the invoice: 84 headless agent runs in a throwaway lab, two models, everything graded mechanically. Of the three things I believed when I wrote that recommendation, one turned out better than I claimed, one worse, and one was a category error.
+
+## The index is honest. The aggregate is the part nobody quotes.
+
+The official numbers are on [Anthropic's Agent Skills page](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview), in a table that's refreshingly specific: Level 1 metadata (name and description) is *always loaded* at roughly 100 tokens per skill; Level 2, the `SKILL.md` body, loads only when the skill triggers, at under 5k; Level 3 bundled files cost nothing until read. The conclusion the docs draw:
+
+> "This lightweight approach means you can install many Skills without context penalty: until a Skill is triggered, only its name and description occupy context."
+
+The per-skill figure holds up. I measured it directly, using two sibling directories that differ by exactly one thing — thirteen project skills in `.claude/skills/`:
+
+```bash
+# same prompt, same flags, one directory has 13 project skills
+a3-baseline  31,590 prompt tokens
+b3-crowd     32,226 prompt tokens
+```
+
+636 tokens for thirteen skills. About **49 tokens each**, comfortably under the docs' ~100. Anthropic isn't shading the number.
+
+What the sentence hides is the plural. "Install many Skills without context penalty" is true one skill at a time and false in aggregate, because the penalty is per-skill and the count is the thing that grows. I have four plugins enabled and have never once thought about how many skills they carry with them. Together with the bundled ones they're the 7,778 tokens above — about **thirteen times** the 570-token `CLAUDE.md` I was so pleased with myself for trimming in the first post. I cut a file and installed a plugin bundle worth an order of magnitude more, and felt virtuous doing it.
+
+There's a knob most people miss, and it's the useful part of the frontmatter reference: `disable-model-invocation: true` takes a skill out of the listing entirely. The docs are explicit that with it set, the description is *not* in context and the skill loads only when you type `/name`. For the deploy checklist you always invoke by hand, that's free. It's the only setting in this whole system that makes a skill cost literally zero until used.
+
+While you're auditing: the combined `description` and `when_to_use` text is truncated at 1,536 characters in the listing. That's the ceiling on one skill's standing cost — roughly 380 tokens. A skill author who writes a paragraph where a sentence would do is spending your context, in every session, forever.
+
+## The trigger panic doesn't reproduce
+
+The reason skills are having a credibility problem is an eval Vercel published in January 2026, [*AGENTS.md outperforms skills in our agent evals*](https://vercel.com/blog/agents-md-outperforms-skills-in-our-agent-evals) by Jude Gao. They tested four ways of teaching an agent Next.js 16 APIs that postdate its training data — `connection()`, `'use cache'`, `cacheLife()`, `forbidden()`:
+
+| Configuration          | Pass rate |
+| ---------------------- | --------- |
+| Baseline (no docs)     | 53%       |
+| Skill, default         | 53%       |
+| Skill, told to use it  | 79%       |
+| `AGENTS.md` docs index | 100%      |
+
+The line that got quoted everywhere: *"In 56% of eval cases, the skill was never invoked."* A skill the model never opens is worth exactly its index cost, which is how you get +0pp over baseline. Vercel took their own advice seriously enough to act on it — [Next.js 16.3](https://nextjs.org/blog/next-16-3-ai-improvements), in preview as I write this, retires their knowledge skills in favour of bundled docs reached through a managed `AGENTS.md` block, and keeps first-party skills only for multi-step workflows.
+
+I wanted to know whether that failure was a property of *skills* or a property of *their harness*, so I built a lab: a throwaway repo, a fictional internal package the model cannot possibly know (`@lumen/queue`, whose jobs are settled with `job.settle('done' | 'retry' | 'dead')` and explicitly have no `ack()`/`nack()`), and one task whose correctness is a grep. Each run starts from a fresh copy of the repo, runs through `claude -p`, and is limited to the file tools — no shell, no web, no MCP servers.
+
+The same knowledge, delivered five ways:
+
+- **A — baseline:** nothing. Does the model invent an API?
+- **B — skill:** `.claude/skills/lumen-queue/SKILL.md`, a well-formed description, nothing telling the agent to use it.
+- **C — skill, told:** same, plus "Use the lumen-queue skill" in the prompt.
+- **D — pointer:** a short `CLAUDE.md` table saying "for `@lumen/queue`, read `docs/lumen-queue.md`" — Vercel's retrieval-led shape, in the file Claude Code actually reads.
+- **E — inline:** the whole doc pasted into `CLAUDE.md`. The thing I told you not to do.
+
+Five runs each, Sonnet 5:
+
+| Arm           | Correct | Skill fired | API round trips | Median prompt tokens |
+| ------------- | ------- | ----------- | --------------- | -------------------- |
+| A baseline    | 0 / 5   | —           | 5               | 161,615              |
+| B skill       | 5 / 5   | 5 / 5       | 3               | 97,285               |
+| C skill, told | 5 / 5   | 5 / 5       | 3               | 97,177               |
+| D pointer     | 5 / 5   | —           | 3               | 97,999               |
+| E inline      | 5 / 5   | —           | 2               | 65,212               |
+
+Baseline goes 0 for 5 and the failure is identical every time — the model writes the API it wishes existed:
+
+```ts
+const queue = new Queue('billing-retry');
+// ...
+if (response.ok) {
+  await queue.ack(job);
+} else {
+  await queue.nack(job);
+}
+```
+
+But the skill fired every single time, unprompted. So I spent the rest of the afternoon trying to make it *not* fire.
+
+I gave it a task with no lexical overlap with the skill's description ("return the order total as a display string for the confirmation email" against a skill about money and currency). It fired 5/5. I buried it among twelve plausible decoy skills — testing, i18n, security, migrations, telemetry — so it had to be chosen, not merely noticed. 5/5. I replaced its careful description with the laziest thing a real developer would write, `description: Money helpers for this repo.`, deliberately breaking the docs' rule that a description must say *when* to use the skill. Still 5/5.
+
+Counting every run where a skill was installed and the prompt said nothing about it — four arms, both models — that's **28 out of 28 unprompted invocations**. Arm C, the one that begs, added nothing to arms that were already at 5/5.
+
+Whatever produced Vercel's 56%, it isn't inherent to skills as a mechanism. Their post doesn't name the model or the harness, so nobody outside their team can tell which variable produced it. Two labs, opposite results: the honest read is that this number isn't portable, and neither is mine. Measure it in yours.
+
+One run in the vague-description arm didn't produce a passing file, and it's the most interesting failure I saw. The agent invoked two *decoy* skills — `i18n` and `error-handling`, whose bodies I'd filled with the placeholder line "Ask the owning team before changing anything in this area" — and then did exactly that: it stopped and asked me. My lab's fault. But it demonstrates something real that the token accounting hides. A fired skill doesn't just add knowledge, it adds *instructions*, and an irrelevant skill that triggers can redirect the whole task. The index cost of a skill you never use is 49 tokens. The cost of one that fires when it shouldn't is the run.
+
+## The bill is in the turn, not in the index
+
+Look back at that table, at the two columns I haven't discussed.
+
+Arm E — the whole document pasted into `CLAUDE.md`, the always-loaded copy I spent a whole post arguing against — used **65,212** tokens. The skill used **97,285** for identical output. Inline was a third cheaper than lazy loading.
+
+That's not a paradox, it's just how turns are billed. Retrieval is not "load 1,000 tokens later instead of now." It's an extra round trip, and on a round trip the entire conversation — system prompt, tool definitions, skill index, all of it — is re-sent so the model can think again. Divide each arm by its round trips and the whole table collapses into one number:
+
+```
+E inline    65,212 / 2 = 32,606
+B skill     97,285 / 3 = 32,428
+D pointer   97,999 / 3 = 32,666
+A baseline 161,615 / 5 = 32,323
+```
+
+Every arm cost the same ~32.4k per round trip. The only variable was how many trips the delivery mechanism needed: inline took one call to write the file, the skill and the pointer each needed a fetch before that, and the baseline spent two extra trips flailing — globbing the repo, reading `package.json`, then trying `**/node_modules/@lumen/**` for a package that isn't installed — before writing the wrong thing anyway.
+
+The document at the centre of all this is 1,053 characters, about 260 tokens. That's the recurring cost I was so worried about, against ~32k to ask one more question. Lazy loading isn't free; it's deferred, with a fee attached.
+
+Then I ran the same three arms on Opus 5 and the ranking inverted. The skill became the *cheapest* arm — a median 77,989 tokens against 105,493 for the inline copy — because it settled into three round trips while the inline arm took a median of four. Opus went exploring the repo with the document already sitting in its context, and spent the trips I thought I'd bought my way out of.
+
+The rule underneath both runs is the same, and it's the only one worth carrying out of here: **cost tracks round trips, and the model decides how many it takes.** Where you put the document sets a floor under that number, not the number itself. Which is a much less satisfying piece of advice than "use skills, they're lazy," and considerably more true.
+
+And the loaded skill doesn't leave when it's done. Claude Code's docs are blunt about it: once a skill loads, its content *"stays in context across turns, so every line is a recurring token cost."* It also survives the thing that clears everything else — on auto-compaction the most recent invocation of each skill is re-attached after the summary, keeping the first 5,000 tokens of each, with a combined budget of 25,000 tokens. A file the agent read gets summarised away. A skill it triggered gets re-injected.
+
+## What actually decides it
+
+The last measurement changed my mind more than the others. The third experiment used a different kind of knowledge: a house rule about money, where the helper it names — `src/lib/money.ts` — was sitting right there in the repo. Sonnet 5's baseline failed 5/5, building its own `Intl.NumberFormat` and dividing by 100 next to a file that exists to do exactly that. Opus 5's baseline passed **5 out of 5** with no skill, no doc and no pointer. It globbed the source tree, opened `money.ts`, and used it.
+
+On the first experiment, where the knowledge exists nowhere in the repository, Opus fails just as flatly: 0 for 3. It doesn't even invent the same API Sonnet does — it goes with `for await (const job of queue.consume())` and a `job.remove()` — it's just as confidently wrong in a different dialect. That contrast is the whole test, and it sharpens the bet I described in the first post into something you can check: **every skill is a wager that the knowledge isn't recoverable from the code.** As models get better, that wager gets worse. A good chunk of what I'd carefully documented about my own repo was a note to an agent that would have found it by opening two files.
+
+So, concretely, what I do now:
+
+1. **Audit the aggregate, not the file.** Run the two-line diff at the top of this post on your own machine. If the number is bigger than the `CLAUDE.md` you feel guilty about, your guilt is misallocated.
+2. **Small and needed on most tasks → keep it resident.** A few hundred tokens of standing text is cheap next to a round trip you might avoid.
+3. **Big, or rarely needed → a skill or a doc pointer.** In my lab they were indistinguishable: 5/5 correct either way, within a couple of percent on tokens. Pick whichever your team will maintain.
+4. **Invoked by hand → `disable-model-invocation: true`.** That's the only genuinely free skill.
+5. **Recoverable from the repo → delete it.** Let the model read the file.
+
+One trap worth knowing if you use both tools: **Claude Code reads `CLAUDE.md`, not `AGENTS.md`.** That's straight from [the memory docs](https://code.claude.com/docs/en/memory), and `AGENTS.md` is exactly where Next.js 16.3's `next dev` writes its managed block of agent instructions — the one that opens "This is NOT the Next.js you know." Run both and that block is addressed to a reader who never opens the envelope. One line of `CLAUDE.md` fixes it:
+
+```markdown
+@AGENTS.md
+```
+
+## What I'd distrust here, including my own numbers
+
+Five runs per arm on Sonnet and three on Opus, one task family, one machine, and grading by regex. Enough to kill a claim that went 0/5 or held 28/28; nowhere near enough to publish a percentage. My regex earned its keep in exactly one place, and against me: the single "failing" Opus run with the skill wrote `await job.settle(response.ok ? 'done' : 'retry')` — correct code my `settle('done')` pattern didn't match. Grading by grep finds the shape you predicted, not the code that's right.
+
+The 7,778 figure is my plugin set, not yours, and it's the whole listing that flag removes — skills and built-in commands together. The 636-token marginal cost is thirteen short descriptions and would be several times that with verbose ones. The token counts are what the API billed across a whole run, so a run with more round trips re-pays for its own context; that's the effect being measured, but it does mean these numbers compare *strategies*, not documents. Total spend, both models: $12.68 across 84 runs. Which is the other reason to run your own — it's the cheapest opinion you'll buy this week.
+
+The uncomfortable part is that I published the recommendation first and the measurement second. The recommendation wasn't wrong, exactly: skills do what the docs say, they trigger far better than the current discourse claims, and the index is honestly priced. But "it only loads when you need it" quietly became "it's free," and that step was mine, not Anthropic's. Free is the one thing nothing in a context window has ever been.
